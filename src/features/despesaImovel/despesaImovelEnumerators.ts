@@ -1,0 +1,30 @@
+export const despesaImovelEnumerators = {
+  categoria: {
+    manutencao: 'manutencao',
+    condominio: 'condominio',
+    iptu: 'iptu',
+    seguro: 'seguro',
+    taxa: 'taxa',
+    cartorio: 'cartorio',
+    limpeza: 'limpeza',
+    vistoria: 'vistoria',
+    marketing: 'marketing',
+    juridico: 'juridico',
+    outro: 'outro',
+  },
+  status: {
+    prevista: 'prevista',
+    pendente: 'pendente',
+    paga: 'paga',
+    atrasada: 'atrasada',
+    cancelada: 'cancelada',
+  },
+  responsavelPagamento: {
+    proprietario: 'proprietario',
+    locatario: 'locatario',
+    imobiliaria: 'imobiliaria',
+    condominio: 'condominio',
+    seguradora: 'seguradora',
+    outro: 'outro',
+  },
+};

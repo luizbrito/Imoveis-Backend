@@ -1,0 +1,38 @@
+export const clienteEnumerators = {
+  tipoPessoa: {
+    fisica: 'fisica',
+    juridica: 'juridica',
+  },
+  finalidades: {
+    comprar: 'comprar',
+    alugar: 'alugar',
+    vender: 'vender',
+    anunciar: 'anunciar',
+    investir: 'investir',
+    avaliar: 'avaliar',
+  },
+  tiposInteresse: {
+    apartamento: 'apartamento',
+    casa: 'casa',
+    sobrado: 'sobrado',
+    terreno: 'terreno',
+    sala_comercial: 'sala_comercial',
+    loja: 'loja',
+    galpao: 'galpao',
+    chacara: 'chacara',
+    fazenda: 'fazenda',
+    predio: 'predio',
+    outro: 'outro',
+  },
+  canalPreferido: {
+    telefone: 'telefone',
+    whatsapp: 'whatsapp',
+    email: 'email',
+    site: 'site',
+    portal: 'portal',
+    presencial: 'presencial',
+    indicacao: 'indicacao',
+    rede_social: 'rede_social',
+    outro: 'outro',
+  },
+};

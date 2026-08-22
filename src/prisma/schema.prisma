@@ -1,0 +1,3585 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  // Better Auth fields
+  email            String  @unique
+  emailVerified    Boolean @default(false)
+  name             String  @default("")
+  image            String?
+  twoFactorEnabled Boolean @default(false)
+
+  // Relations
+  members           Member[]
+  subscriptions     Subscription[]
+  sessions          Session[]
+  accounts          Account[]
+  apiKeys           ApiKey[]
+  pushTokens        PushToken[]
+  notifications     Notification[]
+  invitations       Invitation[]
+  oauthApplications OauthApplication[]
+  oauthAccessTokens OauthAccessToken[]
+  oauthConsents     OauthConsent[]
+  twoFactors        TwoFactor[]
+  favoritosPublicos FavoritoPublico[]
+}
+
+model AuditLog {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  timestamp           DateTime @default(now()) @db.Timestamptz(3)
+  entityName          String
+  entityId            String   @db.Uuid // No FK to keep deleted entities logs
+  organizationId      String?  @db.Uuid // No FK to keep deleted entities logs
+  userId              String?  @db.Uuid // No FK to keep deleted entities logs
+  memberId            String?  @db.Uuid // No FK to keep deleted entities logs
+  apiKeyId            String?  @db.Uuid // No FK to keep deleted entities logs
+  apiEndpoint         String?
+  apiHttpResponseCode String?
+  operation           String
+  oldData             Json?
+  newData             Json?
+}
+
+// Better Auth API Key model
+model ApiKey {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  configId    String  @default("default")
+  name        String?
+  start       String? // Starting characters for display
+  prefix      String? // API key prefix
+  key         String  @unique // Hashed API key
+  referenceId String  @db.Uuid
+  user        User    @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  // Organization
+  organizationId String?       @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  // Refill system
+  refillInterval Int?
+  refillAmount   Int?
+  lastRefillAt   DateTime? @db.Timestamptz(3)
+
+  // Status
+  enabled Boolean? @default(true)
+
+  // Rate limiting
+  rateLimitEnabled    Boolean? @default(true)
+  rateLimitTimeWindow Int?     @default(86400000)
+  rateLimitMax        Int?     @default(1000)
+  requestCount        Int?     @default(0)
+
+  // Usage tracking
+  remaining   Int?
+  lastRequest DateTime? @db.Timestamptz(3)
+  expiresAt   DateTime? @db.Timestamptz(3)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  // Permissions and metadata
+  permissions String? // JSON string of permissions
+  metadata    Json? // Additional metadata
+
+  @@index([organizationId])
+}
+
+model PushToken {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @db.Uuid
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String // 'web' or 'mobile' (expo, fcm, apns)
+  token          String // For mobile: Expo push token. For web: subscription endpoint
+  platform       String? // For mobile: 'ios' or 'android'. Null for web
+  p256dh         String? // For web push: encryption key
+  auth           String? // For web push: authentication secret
+  expirationTime DateTime? @db.Timestamptz(3) // For web push: subscription expiration
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([type])
+}
+
+model Notification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @db.Uuid
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String    @db.Uuid
+  type           String // 'memberAdded', 'memberRemoved', etc.
+  roles          String[] // Roles that should receive this notification (e.g., ['admin'])
+  payload        Json // Notification-specific data (member details, etc.)
+  readAt         DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([userId, readAt])
+}
+
+model Organization {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  slug                 String   @unique
+  logosDark            Json?
+  logosLight           Json?
+  backgroundImageDark  Json?
+  backgroundImageLight Json?
+  require2fa           Boolean  @default(false)
+  metadata             Json?
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+  logo                 String?
+  createdByUserId      String?  @db.Uuid
+  updatedByUserId      String?  @db.Uuid
+
+  members       Member[]
+  invitations   Invitation[]
+  subscriptions Subscription[]
+  apiKeys       ApiKey[]
+  filialOrganization Filial[]
+  corretorOrganization Corretor[]
+  proprietarioOrganization Proprietario[]
+  clienteOrganization Cliente[]
+  condominioOrganization Condominio[]
+  empreendimentoOrganization Empreendimento[]
+  imovelOrganization Imovel[]
+  caracteristicaImovelOrganization CaracteristicaImovel[]
+  imovelCaracteristicaOrganization ImovelCaracteristica[]
+  midiaImovelOrganization MidiaImovel[]
+  documentoImovelOrganization DocumentoImovel[]
+  captacaoImovelOrganization CaptacaoImovel[]
+  avaliacaoImovelOrganization AvaliacaoImovel[]
+  chaveImovelOrganization ChaveImovel[]
+  vistoriaOrganization Vistoria[]
+  itemVistoriaOrganization ItemVistoria[]
+  anuncioOrganization Anuncio[]
+  portalImobiliarioOrganization PortalImobiliario[]
+  publicacaoPortalOrganization PublicacaoPortal[]
+  campanhaMarketingOrganization CampanhaMarketing[]
+  campanhaAnuncioOrganization CampanhaAnuncio[]
+  leadOrganization Lead[]
+  interacaoLeadOrganization InteracaoLead[]
+  tarefaComercialOrganization TarefaComercial[]
+  visitaOrganization Visita[]
+  propostaOrganization Proposta[]
+  condicaoPropostaOrganization CondicaoProposta[]
+  reservaImovelOrganization ReservaImovel[]
+  vendaOrganization Venda[]
+  contratoVendaOrganization ContratoVenda[]
+  parcelaVendaOrganization ParcelaVenda[]
+  locacaoOrganization Locacao[]
+  participanteLocacaoOrganization ParticipanteLocacao[]
+  garantiaLocacaoOrganization GarantiaLocacao[]
+  contratoLocacaoOrganization ContratoLocacao[]
+  cobrancaLocacaoOrganization CobrancaLocacao[]
+  pagamentoLocacaoOrganization PagamentoLocacao[]
+  reajusteLocacaoOrganization ReajusteLocacao[]
+  repasseProprietarioOrganization RepasseProprietario[]
+  comissaoOrganization Comissao[]
+  pagamentoComissaoOrganization PagamentoComissao[]
+  fornecedorOrganization Fornecedor[]
+  solicitacaoManutencaoOrganization SolicitacaoManutencao[]
+  ordemServicoOrganization OrdemServico[]
+  despesaImovelOrganization DespesaImovel[]
+  contaFinanceiraOrganization ContaFinanceira[]
+  categoriaFinanceiraOrganization CategoriaFinanceira[]
+  lancamentoFinanceiroOrganization LancamentoFinanceiro[]
+  documentoPessoaOrganization DocumentoPessoa[]
+  consentimentoLGPDOrganization ConsentimentoLGPD[]
+  favoritoClienteOrganization FavoritoCliente[]
+  solicitacaoContatoOrganization SolicitacaoContato[]
+  simulacaoFinanciamentoOrganization SimulacaoFinanciamento[]
+  contratoAdministracaoOrganization ContratoAdministracao[]
+  seguroImovelOrganization SeguroImovel[]
+  ocorrenciaImovelOrganization OcorrenciaImovel[]
+  arquivoKmlOrganization ArquivoKml[]
+  documentacaoRuralBrasilOrganization DocumentacaoRuralBrasil[]
+  referenciaClimaticaRuralOrganization ReferenciaClimaticaRural[]
+  tipoSoloOrganization TipoSolo[]
+  soloImovelRuralOrganization SoloImovelRural[]
+  topografiaRuralOrganization TopografiaRural[]
+  recursoHidricoRuralOrganization RecursoHidricoRural[]
+  infraestruturaEnergiaConectividadeOrganization InfraestruturaEnergiaConectividade[]
+  logisticaRuralOrganization LogisticaRural[]
+  pistaAviacaoRuralOrganization PistaAviacaoRural[]
+  benfeitoriaRuralOrganization BenfeitoriaRural[]
+  divisaoOperacionalRuralOrganization DivisaoOperacionalRural[]
+  producaoHistoricaRuralOrganization ProducaoHistoricaRural[]
+  sistemaProdutivoRuralOrganization SistemaProdutivoRural[]
+  ativoIncluidoVendaRuralOrganization AtivoIncluidoVendaRural[]
+  restricaoTerritorialRuralOrganization RestricaoTerritorialRural[]
+  riscoRuralOrganization RiscoRural[]
+  certificacaoSustentabilidadeRuralOrganization CertificacaoSustentabilidadeRural[]
+  condicaoComercialRuralOrganization CondicaoComercialRural[]
+  dueDiligenceRuralOrganization DueDiligenceRural[]
+  paisOrganization Pais[]
+  estadoOrganization Estado[]
+  cidadeOrganization Cidade[]
+  favoritoPublicoOrganization FavoritoPublico[]
+}
+
+model Member {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  // Additional fields
+  firstName              String?
+  lastName               String?
+  fullName               String?
+  avatars                Json?
+  disabled               Boolean @default(false)
+  isNotificationsEnabled Boolean @default(true)
+  importHash             String? @unique
+  createdByUserId        String? @db.Uuid
+  createdByMemberId      String? @db.Uuid
+  updatedByUserId        String? @db.Uuid
+  updatedByMemberId      String? @db.Uuid
+
+  // Relations
+  createdByMember Member?  @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+  memberCreatedBy Member[] @relation("createdByMember")
+  updatedByMember Member?  @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+  memberUpdatedBy Member[] @relation("updatedByMember")
+
+  subscriptions Subscription[]
+  filialCreatedBy        Filial[]     @relation("createdByMember")
+  filialUpdatedBy        Filial[]     @relation("updatedByMember")
+  filialArchivedBy       Filial[]     @relation("archivedByMember")
+  corretorCreatedBy        Corretor[]     @relation("createdByMember")
+  corretorUpdatedBy        Corretor[]     @relation("updatedByMember")
+  corretorArchivedBy       Corretor[]     @relation("archivedByMember")
+  corretorContaMembro Corretor[] @relation("corretorContaMembro_contaMembro")
+  proprietarioCreatedBy        Proprietario[]     @relation("createdByMember")
+  proprietarioUpdatedBy        Proprietario[]     @relation("updatedByMember")
+  proprietarioArchivedBy       Proprietario[]     @relation("archivedByMember")
+  clienteCreatedBy        Cliente[]     @relation("createdByMember")
+  clienteUpdatedBy        Cliente[]     @relation("updatedByMember")
+  clienteArchivedBy       Cliente[]     @relation("archivedByMember")
+  condominioCreatedBy        Condominio[]     @relation("createdByMember")
+  condominioUpdatedBy        Condominio[]     @relation("updatedByMember")
+  condominioArchivedBy       Condominio[]     @relation("archivedByMember")
+  empreendimentoCreatedBy        Empreendimento[]     @relation("createdByMember")
+  empreendimentoUpdatedBy        Empreendimento[]     @relation("updatedByMember")
+  empreendimentoArchivedBy       Empreendimento[]     @relation("archivedByMember")
+  imovelCreatedBy        Imovel[]     @relation("createdByMember")
+  imovelUpdatedBy        Imovel[]     @relation("updatedByMember")
+  imovelArchivedBy       Imovel[]     @relation("archivedByMember")
+  caracteristicaImovelCreatedBy        CaracteristicaImovel[]     @relation("createdByMember")
+  caracteristicaImovelUpdatedBy        CaracteristicaImovel[]     @relation("updatedByMember")
+  caracteristicaImovelArchivedBy       CaracteristicaImovel[]     @relation("archivedByMember")
+  imovelCaracteristicaCreatedBy        ImovelCaracteristica[]     @relation("createdByMember")
+  imovelCaracteristicaUpdatedBy        ImovelCaracteristica[]     @relation("updatedByMember")
+  imovelCaracteristicaArchivedBy       ImovelCaracteristica[]     @relation("archivedByMember")
+  midiaImovelCreatedBy        MidiaImovel[]     @relation("createdByMember")
+  midiaImovelUpdatedBy        MidiaImovel[]     @relation("updatedByMember")
+  midiaImovelArchivedBy       MidiaImovel[]     @relation("archivedByMember")
+  documentoImovelCreatedBy        DocumentoImovel[]     @relation("createdByMember")
+  documentoImovelUpdatedBy        DocumentoImovel[]     @relation("updatedByMember")
+  documentoImovelArchivedBy       DocumentoImovel[]     @relation("archivedByMember")
+  captacaoImovelCreatedBy        CaptacaoImovel[]     @relation("createdByMember")
+  captacaoImovelUpdatedBy        CaptacaoImovel[]     @relation("updatedByMember")
+  captacaoImovelArchivedBy       CaptacaoImovel[]     @relation("archivedByMember")
+  avaliacaoImovelCreatedBy        AvaliacaoImovel[]     @relation("createdByMember")
+  avaliacaoImovelUpdatedBy        AvaliacaoImovel[]     @relation("updatedByMember")
+  avaliacaoImovelArchivedBy       AvaliacaoImovel[]     @relation("archivedByMember")
+  chaveImovelCreatedBy        ChaveImovel[]     @relation("createdByMember")
+  chaveImovelUpdatedBy        ChaveImovel[]     @relation("updatedByMember")
+  chaveImovelArchivedBy       ChaveImovel[]     @relation("archivedByMember")
+  vistoriaCreatedBy        Vistoria[]     @relation("createdByMember")
+  vistoriaUpdatedBy        Vistoria[]     @relation("updatedByMember")
+  vistoriaArchivedBy       Vistoria[]     @relation("archivedByMember")
+  itemVistoriaCreatedBy        ItemVistoria[]     @relation("createdByMember")
+  itemVistoriaUpdatedBy        ItemVistoria[]     @relation("updatedByMember")
+  itemVistoriaArchivedBy       ItemVistoria[]     @relation("archivedByMember")
+  anuncioCreatedBy        Anuncio[]     @relation("createdByMember")
+  anuncioUpdatedBy        Anuncio[]     @relation("updatedByMember")
+  anuncioArchivedBy       Anuncio[]     @relation("archivedByMember")
+  portalImobiliarioCreatedBy        PortalImobiliario[]     @relation("createdByMember")
+  portalImobiliarioUpdatedBy        PortalImobiliario[]     @relation("updatedByMember")
+  portalImobiliarioArchivedBy       PortalImobiliario[]     @relation("archivedByMember")
+  publicacaoPortalCreatedBy        PublicacaoPortal[]     @relation("createdByMember")
+  publicacaoPortalUpdatedBy        PublicacaoPortal[]     @relation("updatedByMember")
+  publicacaoPortalArchivedBy       PublicacaoPortal[]     @relation("archivedByMember")
+  campanhaMarketingCreatedBy        CampanhaMarketing[]     @relation("createdByMember")
+  campanhaMarketingUpdatedBy        CampanhaMarketing[]     @relation("updatedByMember")
+  campanhaMarketingArchivedBy       CampanhaMarketing[]     @relation("archivedByMember")
+  campanhaAnuncioCreatedBy        CampanhaAnuncio[]     @relation("createdByMember")
+  campanhaAnuncioUpdatedBy        CampanhaAnuncio[]     @relation("updatedByMember")
+  campanhaAnuncioArchivedBy       CampanhaAnuncio[]     @relation("archivedByMember")
+  leadCreatedBy        Lead[]     @relation("createdByMember")
+  leadUpdatedBy        Lead[]     @relation("updatedByMember")
+  leadArchivedBy       Lead[]     @relation("archivedByMember")
+  interacaoLeadCreatedBy        InteracaoLead[]     @relation("createdByMember")
+  interacaoLeadUpdatedBy        InteracaoLead[]     @relation("updatedByMember")
+  interacaoLeadArchivedBy       InteracaoLead[]     @relation("archivedByMember")
+  tarefaComercialCreatedBy        TarefaComercial[]     @relation("createdByMember")
+  tarefaComercialUpdatedBy        TarefaComercial[]     @relation("updatedByMember")
+  tarefaComercialArchivedBy       TarefaComercial[]     @relation("archivedByMember")
+  visitaCreatedBy        Visita[]     @relation("createdByMember")
+  visitaUpdatedBy        Visita[]     @relation("updatedByMember")
+  visitaArchivedBy       Visita[]     @relation("archivedByMember")
+  propostaCreatedBy        Proposta[]     @relation("createdByMember")
+  propostaUpdatedBy        Proposta[]     @relation("updatedByMember")
+  propostaArchivedBy       Proposta[]     @relation("archivedByMember")
+  condicaoPropostaCreatedBy        CondicaoProposta[]     @relation("createdByMember")
+  condicaoPropostaUpdatedBy        CondicaoProposta[]     @relation("updatedByMember")
+  condicaoPropostaArchivedBy       CondicaoProposta[]     @relation("archivedByMember")
+  reservaImovelCreatedBy        ReservaImovel[]     @relation("createdByMember")
+  reservaImovelUpdatedBy        ReservaImovel[]     @relation("updatedByMember")
+  reservaImovelArchivedBy       ReservaImovel[]     @relation("archivedByMember")
+  vendaCreatedBy        Venda[]     @relation("createdByMember")
+  vendaUpdatedBy        Venda[]     @relation("updatedByMember")
+  vendaArchivedBy       Venda[]     @relation("archivedByMember")
+  contratoVendaCreatedBy        ContratoVenda[]     @relation("createdByMember")
+  contratoVendaUpdatedBy        ContratoVenda[]     @relation("updatedByMember")
+  contratoVendaArchivedBy       ContratoVenda[]     @relation("archivedByMember")
+  parcelaVendaCreatedBy        ParcelaVenda[]     @relation("createdByMember")
+  parcelaVendaUpdatedBy        ParcelaVenda[]     @relation("updatedByMember")
+  parcelaVendaArchivedBy       ParcelaVenda[]     @relation("archivedByMember")
+  locacaoCreatedBy        Locacao[]     @relation("createdByMember")
+  locacaoUpdatedBy        Locacao[]     @relation("updatedByMember")
+  locacaoArchivedBy       Locacao[]     @relation("archivedByMember")
+  participanteLocacaoCreatedBy        ParticipanteLocacao[]     @relation("createdByMember")
+  participanteLocacaoUpdatedBy        ParticipanteLocacao[]     @relation("updatedByMember")
+  participanteLocacaoArchivedBy       ParticipanteLocacao[]     @relation("archivedByMember")
+  garantiaLocacaoCreatedBy        GarantiaLocacao[]     @relation("createdByMember")
+  garantiaLocacaoUpdatedBy        GarantiaLocacao[]     @relation("updatedByMember")
+  garantiaLocacaoArchivedBy       GarantiaLocacao[]     @relation("archivedByMember")
+  contratoLocacaoCreatedBy        ContratoLocacao[]     @relation("createdByMember")
+  contratoLocacaoUpdatedBy        ContratoLocacao[]     @relation("updatedByMember")
+  contratoLocacaoArchivedBy       ContratoLocacao[]     @relation("archivedByMember")
+  cobrancaLocacaoCreatedBy        CobrancaLocacao[]     @relation("createdByMember")
+  cobrancaLocacaoUpdatedBy        CobrancaLocacao[]     @relation("updatedByMember")
+  cobrancaLocacaoArchivedBy       CobrancaLocacao[]     @relation("archivedByMember")
+  pagamentoLocacaoCreatedBy        PagamentoLocacao[]     @relation("createdByMember")
+  pagamentoLocacaoUpdatedBy        PagamentoLocacao[]     @relation("updatedByMember")
+  pagamentoLocacaoArchivedBy       PagamentoLocacao[]     @relation("archivedByMember")
+  reajusteLocacaoCreatedBy        ReajusteLocacao[]     @relation("createdByMember")
+  reajusteLocacaoUpdatedBy        ReajusteLocacao[]     @relation("updatedByMember")
+  reajusteLocacaoArchivedBy       ReajusteLocacao[]     @relation("archivedByMember")
+  repasseProprietarioCreatedBy        RepasseProprietario[]     @relation("createdByMember")
+  repasseProprietarioUpdatedBy        RepasseProprietario[]     @relation("updatedByMember")
+  repasseProprietarioArchivedBy       RepasseProprietario[]     @relation("archivedByMember")
+  comissaoCreatedBy        Comissao[]     @relation("createdByMember")
+  comissaoUpdatedBy        Comissao[]     @relation("updatedByMember")
+  comissaoArchivedBy       Comissao[]     @relation("archivedByMember")
+  pagamentoComissaoCreatedBy        PagamentoComissao[]     @relation("createdByMember")
+  pagamentoComissaoUpdatedBy        PagamentoComissao[]     @relation("updatedByMember")
+  pagamentoComissaoArchivedBy       PagamentoComissao[]     @relation("archivedByMember")
+  fornecedorCreatedBy        Fornecedor[]     @relation("createdByMember")
+  fornecedorUpdatedBy        Fornecedor[]     @relation("updatedByMember")
+  fornecedorArchivedBy       Fornecedor[]     @relation("archivedByMember")
+  solicitacaoManutencaoCreatedBy        SolicitacaoManutencao[]     @relation("createdByMember")
+  solicitacaoManutencaoUpdatedBy        SolicitacaoManutencao[]     @relation("updatedByMember")
+  solicitacaoManutencaoArchivedBy       SolicitacaoManutencao[]     @relation("archivedByMember")
+  ordemServicoCreatedBy        OrdemServico[]     @relation("createdByMember")
+  ordemServicoUpdatedBy        OrdemServico[]     @relation("updatedByMember")
+  ordemServicoArchivedBy       OrdemServico[]     @relation("archivedByMember")
+  despesaImovelCreatedBy        DespesaImovel[]     @relation("createdByMember")
+  despesaImovelUpdatedBy        DespesaImovel[]     @relation("updatedByMember")
+  despesaImovelArchivedBy       DespesaImovel[]     @relation("archivedByMember")
+  contaFinanceiraCreatedBy        ContaFinanceira[]     @relation("createdByMember")
+  contaFinanceiraUpdatedBy        ContaFinanceira[]     @relation("updatedByMember")
+  contaFinanceiraArchivedBy       ContaFinanceira[]     @relation("archivedByMember")
+  categoriaFinanceiraCreatedBy        CategoriaFinanceira[]     @relation("createdByMember")
+  categoriaFinanceiraUpdatedBy        CategoriaFinanceira[]     @relation("updatedByMember")
+  categoriaFinanceiraArchivedBy       CategoriaFinanceira[]     @relation("archivedByMember")
+  lancamentoFinanceiroCreatedBy        LancamentoFinanceiro[]     @relation("createdByMember")
+  lancamentoFinanceiroUpdatedBy        LancamentoFinanceiro[]     @relation("updatedByMember")
+  lancamentoFinanceiroArchivedBy       LancamentoFinanceiro[]     @relation("archivedByMember")
+  documentoPessoaCreatedBy        DocumentoPessoa[]     @relation("createdByMember")
+  documentoPessoaUpdatedBy        DocumentoPessoa[]     @relation("updatedByMember")
+  documentoPessoaArchivedBy       DocumentoPessoa[]     @relation("archivedByMember")
+  consentimentoLGPDCreatedBy        ConsentimentoLGPD[]     @relation("createdByMember")
+  consentimentoLGPDUpdatedBy        ConsentimentoLGPD[]     @relation("updatedByMember")
+  consentimentoLGPDArchivedBy       ConsentimentoLGPD[]     @relation("archivedByMember")
+  favoritoClienteCreatedBy        FavoritoCliente[]     @relation("createdByMember")
+  favoritoClienteUpdatedBy        FavoritoCliente[]     @relation("updatedByMember")
+  favoritoClienteArchivedBy       FavoritoCliente[]     @relation("archivedByMember")
+  solicitacaoContatoCreatedBy        SolicitacaoContato[]     @relation("createdByMember")
+  solicitacaoContatoUpdatedBy        SolicitacaoContato[]     @relation("updatedByMember")
+  solicitacaoContatoArchivedBy       SolicitacaoContato[]     @relation("archivedByMember")
+  simulacaoFinanciamentoCreatedBy        SimulacaoFinanciamento[]     @relation("createdByMember")
+  simulacaoFinanciamentoUpdatedBy        SimulacaoFinanciamento[]     @relation("updatedByMember")
+  simulacaoFinanciamentoArchivedBy       SimulacaoFinanciamento[]     @relation("archivedByMember")
+  contratoAdministracaoCreatedBy        ContratoAdministracao[]     @relation("createdByMember")
+  contratoAdministracaoUpdatedBy        ContratoAdministracao[]     @relation("updatedByMember")
+  contratoAdministracaoArchivedBy       ContratoAdministracao[]     @relation("archivedByMember")
+  seguroImovelCreatedBy        SeguroImovel[]     @relation("createdByMember")
+  seguroImovelUpdatedBy        SeguroImovel[]     @relation("updatedByMember")
+  seguroImovelArchivedBy       SeguroImovel[]     @relation("archivedByMember")
+  ocorrenciaImovelCreatedBy        OcorrenciaImovel[]     @relation("createdByMember")
+  ocorrenciaImovelUpdatedBy        OcorrenciaImovel[]     @relation("updatedByMember")
+  ocorrenciaImovelArchivedBy       OcorrenciaImovel[]     @relation("archivedByMember")
+  arquivoKmlCreatedBy        ArquivoKml[]     @relation("createdByMember")
+  arquivoKmlUpdatedBy        ArquivoKml[]     @relation("updatedByMember")
+  arquivoKmlArchivedBy       ArquivoKml[]     @relation("archivedByMember")
+  arquivoKmlCadastradoPor ArquivoKml[] @relation("arquivoKmlCadastradoPor_cadastradoPor")
+  documentacaoRuralBrasilCreatedBy        DocumentacaoRuralBrasil[]     @relation("createdByMember")
+  documentacaoRuralBrasilUpdatedBy        DocumentacaoRuralBrasil[]     @relation("updatedByMember")
+  documentacaoRuralBrasilArchivedBy       DocumentacaoRuralBrasil[]     @relation("archivedByMember")
+  referenciaClimaticaRuralCreatedBy        ReferenciaClimaticaRural[]     @relation("createdByMember")
+  referenciaClimaticaRuralUpdatedBy        ReferenciaClimaticaRural[]     @relation("updatedByMember")
+  referenciaClimaticaRuralArchivedBy       ReferenciaClimaticaRural[]     @relation("archivedByMember")
+  tipoSoloCreatedBy        TipoSolo[]     @relation("createdByMember")
+  tipoSoloUpdatedBy        TipoSolo[]     @relation("updatedByMember")
+  tipoSoloArchivedBy       TipoSolo[]     @relation("archivedByMember")
+  soloImovelRuralCreatedBy        SoloImovelRural[]     @relation("createdByMember")
+  soloImovelRuralUpdatedBy        SoloImovelRural[]     @relation("updatedByMember")
+  soloImovelRuralArchivedBy       SoloImovelRural[]     @relation("archivedByMember")
+  topografiaRuralCreatedBy        TopografiaRural[]     @relation("createdByMember")
+  topografiaRuralUpdatedBy        TopografiaRural[]     @relation("updatedByMember")
+  topografiaRuralArchivedBy       TopografiaRural[]     @relation("archivedByMember")
+  recursoHidricoRuralCreatedBy        RecursoHidricoRural[]     @relation("createdByMember")
+  recursoHidricoRuralUpdatedBy        RecursoHidricoRural[]     @relation("updatedByMember")
+  recursoHidricoRuralArchivedBy       RecursoHidricoRural[]     @relation("archivedByMember")
+  infraestruturaEnergiaConectividadeCreatedBy        InfraestruturaEnergiaConectividade[]     @relation("createdByMember")
+  infraestruturaEnergiaConectividadeUpdatedBy        InfraestruturaEnergiaConectividade[]     @relation("updatedByMember")
+  infraestruturaEnergiaConectividadeArchivedBy       InfraestruturaEnergiaConectividade[]     @relation("archivedByMember")
+  logisticaRuralCreatedBy        LogisticaRural[]     @relation("createdByMember")
+  logisticaRuralUpdatedBy        LogisticaRural[]     @relation("updatedByMember")
+  logisticaRuralArchivedBy       LogisticaRural[]     @relation("archivedByMember")
+  pistaAviacaoRuralCreatedBy        PistaAviacaoRural[]     @relation("createdByMember")
+  pistaAviacaoRuralUpdatedBy        PistaAviacaoRural[]     @relation("updatedByMember")
+  pistaAviacaoRuralArchivedBy       PistaAviacaoRural[]     @relation("archivedByMember")
+  benfeitoriaRuralCreatedBy        BenfeitoriaRural[]     @relation("createdByMember")
+  benfeitoriaRuralUpdatedBy        BenfeitoriaRural[]     @relation("updatedByMember")
+  benfeitoriaRuralArchivedBy       BenfeitoriaRural[]     @relation("archivedByMember")
+  divisaoOperacionalRuralCreatedBy        DivisaoOperacionalRural[]     @relation("createdByMember")
+  divisaoOperacionalRuralUpdatedBy        DivisaoOperacionalRural[]     @relation("updatedByMember")
+  divisaoOperacionalRuralArchivedBy       DivisaoOperacionalRural[]     @relation("archivedByMember")
+  producaoHistoricaRuralCreatedBy        ProducaoHistoricaRural[]     @relation("createdByMember")
+  producaoHistoricaRuralUpdatedBy        ProducaoHistoricaRural[]     @relation("updatedByMember")
+  producaoHistoricaRuralArchivedBy       ProducaoHistoricaRural[]     @relation("archivedByMember")
+  sistemaProdutivoRuralCreatedBy        SistemaProdutivoRural[]     @relation("createdByMember")
+  sistemaProdutivoRuralUpdatedBy        SistemaProdutivoRural[]     @relation("updatedByMember")
+  sistemaProdutivoRuralArchivedBy       SistemaProdutivoRural[]     @relation("archivedByMember")
+  ativoIncluidoVendaRuralCreatedBy        AtivoIncluidoVendaRural[]     @relation("createdByMember")
+  ativoIncluidoVendaRuralUpdatedBy        AtivoIncluidoVendaRural[]     @relation("updatedByMember")
+  ativoIncluidoVendaRuralArchivedBy       AtivoIncluidoVendaRural[]     @relation("archivedByMember")
+  restricaoTerritorialRuralCreatedBy        RestricaoTerritorialRural[]     @relation("createdByMember")
+  restricaoTerritorialRuralUpdatedBy        RestricaoTerritorialRural[]     @relation("updatedByMember")
+  restricaoTerritorialRuralArchivedBy       RestricaoTerritorialRural[]     @relation("archivedByMember")
+  riscoRuralCreatedBy        RiscoRural[]     @relation("createdByMember")
+  riscoRuralUpdatedBy        RiscoRural[]     @relation("updatedByMember")
+  riscoRuralArchivedBy       RiscoRural[]     @relation("archivedByMember")
+  certificacaoSustentabilidadeRuralCreatedBy        CertificacaoSustentabilidadeRural[]     @relation("createdByMember")
+  certificacaoSustentabilidadeRuralUpdatedBy        CertificacaoSustentabilidadeRural[]     @relation("updatedByMember")
+  certificacaoSustentabilidadeRuralArchivedBy       CertificacaoSustentabilidadeRural[]     @relation("archivedByMember")
+  condicaoComercialRuralCreatedBy        CondicaoComercialRural[]     @relation("createdByMember")
+  condicaoComercialRuralUpdatedBy        CondicaoComercialRural[]     @relation("updatedByMember")
+  condicaoComercialRuralArchivedBy       CondicaoComercialRural[]     @relation("archivedByMember")
+  dueDiligenceRuralCreatedBy        DueDiligenceRural[]     @relation("createdByMember")
+  dueDiligenceRuralUpdatedBy        DueDiligenceRural[]     @relation("updatedByMember")
+  dueDiligenceRuralArchivedBy       DueDiligenceRural[]     @relation("archivedByMember")
+  paisCreatedBy        Pais[]     @relation("createdByMember")
+  paisUpdatedBy        Pais[]     @relation("updatedByMember")
+  paisArchivedBy       Pais[]     @relation("archivedByMember")
+  estadoCreatedBy        Estado[]     @relation("createdByMember")
+  estadoUpdatedBy        Estado[]     @relation("updatedByMember")
+  estadoArchivedBy       Estado[]     @relation("archivedByMember")
+  cidadeCreatedBy        Cidade[]     @relation("createdByMember")
+  cidadeUpdatedBy        Cidade[]     @relation("updatedByMember")
+  cidadeArchivedBy       Cidade[]     @relation("archivedByMember")
+
+  @@unique([id, organizationId])
+  @@unique([userId, organizationId])
+}
+
+enum SubscriptionStatus {
+  incomplete
+  incomplete_expired
+  trialing
+  active
+  past_due
+  canceled
+  unpaid
+  paused
+}
+
+enum SubscriptionMode {
+  organization
+  member
+  disabled
+}
+
+model Subscription {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?       @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  memberId             String?            @db.Uuid
+  member               Member?            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  userId               String             @db.Uuid
+  user                 User               @relation(fields: [userId], references: [id])
+  mode                 SubscriptionMode
+  cancelAt             DateTime?          @db.Timestamptz(3)
+  stripeCustomerId     String
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  status               SubscriptionStatus
+}
+model Filial {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "filialOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  corretores         Corretor[] @relation("corretores_filial")
+  proprietarios      Proprietario[] @relation("proprietarios_filial")
+  clientes           Cliente[] @relation("clientes_filial")
+  imoveis            Imovel[] @relation("imoveis_filial")
+  leads              Lead[] @relation("leads_filial")
+  campanhasMarketing CampanhaMarketing[] @relation("campanhasMarketing_filial")
+  vendas             Venda[] @relation("vendas_filial")
+  locacoes           Locacao[] @relation("locacoes_filial")
+  contasFinanceiras  ContaFinanceira[] @relation("contasFinanceiras_filial")
+  fornecedores       Fornecedor[] @relation("fornecedores_filial")
+  captacoesImovel    CaptacaoImovel[] @relation("captacoesImovel_filial")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_filial")
+  contratosAdministracao ContratoAdministracao[] @relation("contratosAdministracao_filial")
+  nome               String
+  codigo             String
+  cnpj               String?
+  telefone           String?
+  email              String?
+  logradouro         String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cidade             String?
+  uf                 String?
+  cep                String?
+  ativa              Boolean   @default(false)
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model Corretor {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "corretorOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  imoveisCaptados    Imovel[] @relation("imoveisCaptados_corretorResponsavel")
+  captacoes          CaptacaoImovel[] @relation("captacoes_corretor")
+  avaliacoesRealizadas AvaliacaoImovel[] @relation("avaliacoesRealizadas_avaliador")
+  vistoriasResponsaveis Vistoria[] @relation("vistoriasResponsaveis_corretor")
+  anunciosResponsaveis Anuncio[] @relation("anunciosResponsaveis_corretor")
+  leadsResponsaveis  Lead[] @relation("leadsResponsaveis_corretorResponsavel")
+  interacoesRealizadas InteracaoLead[] @relation("interacoesRealizadas_corretor")
+  tarefasAtribuidas  TarefaComercial[] @relation("tarefasAtribuidas_corretor")
+  visitasConduzidas  Visita[] @relation("visitasConduzidas_corretor")
+  propostasIntermediadas Proposta[] @relation("propostasIntermediadas_corretor")
+  reservasGerenciadas ReservaImovel[] @relation("reservasGerenciadas_corretor")
+  vendasIntermediadas Venda[] @relation("vendasIntermediadas_corretor")
+  locacoesIntermediadas Locacao[] @relation("locacoesIntermediadas_corretor")
+  comissoes          Comissao[] @relation("comissoes_corretor")
+  solicitacoesGerenciadas SolicitacaoManutencao[] @relation("solicitacoesGerenciadas_corretorResponsavel")
+  documentosPessoais DocumentoPessoa[] @relation("documentosPessoais_corretor")
+  solicitacoesAtendidas SolicitacaoContato[] @relation("solicitacoesAtendidas_corretorResponsavel")
+  ocorrenciasGerenciadas OcorrenciaImovel[] @relation("ocorrenciasGerenciadas_corretorResponsavel")
+  nomeCompleto       String
+  tipoPessoa         String
+  cpfCnpj            String?
+  creci              String
+  ufCreci            String?
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  percentualComissaoPadrao Decimal?
+  especialidades     String[]  @default([])
+  foto               Json?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  contaMembroId    String? @db.Uuid
+  contaMembro        Member? @relation("corretorContaMembro_contaMembro", fields: [contaMembroId], references: [id])
+  filialId    String @db.Uuid
+  filial             Filial @relation("corretores_filial", fields: [filialId], references: [id])
+@@unique([cpfCnpj, organizationId])
+@@unique([creci, organizationId])
+@@unique([id, organizationId])
+}
+model Proprietario {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "proprietarioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  imoveis            Imovel[] @relation("imoveis_proprietario")
+  captacoes          CaptacaoImovel[] @relation("captacoes_proprietario")
+  vendasComoProprietario Venda[] @relation("vendasComoProprietario_proprietario")
+  locacoes           Locacao[] @relation("locacoes_proprietario")
+  repasses           RepasseProprietario[] @relation("repasses_proprietario")
+  documentosPessoais DocumentoPessoa[] @relation("documentosPessoais_proprietario")
+  consentimentos     ConsentimentoLGPD[] @relation("consentimentos_proprietario")
+  contratosAdministracao ContratoAdministracao[] @relation("contratosAdministracao_proprietario")
+  nomeRazaoSocial    String
+  tipoPessoa         String
+  cpfCnpj            String?
+  rgInscricaoEstadual String?
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  logradouro         String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cidade             String?
+  uf                 String?
+  cep                String?
+  dadosBancarios     String?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("proprietarios_filial", fields: [filialId], references: [id])
+@@unique([cpfCnpj, organizationId])
+@@unique([id, organizationId])
+}
+model Cliente {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "clienteOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  historicoLeads     Lead[] @relation("historicoLeads_clienteConvertido")
+  tarefasRelacionadas TarefaComercial[] @relation("tarefasRelacionadas_cliente")
+  visitas            Visita[] @relation("visitas_cliente")
+  propostas          Proposta[] @relation("propostas_cliente")
+  reservas           ReservaImovel[] @relation("reservas_cliente")
+  compras            Venda[] @relation("compras_comprador")
+  participacoesLocacao ParticipanteLocacao[] @relation("participacoesLocacao_cliente")
+  solicitacoesAbertas SolicitacaoManutencao[] @relation("solicitacoesAbertas_clienteSolicitante")
+  documentosPessoais DocumentoPessoa[] @relation("documentosPessoais_cliente")
+  consentimentos     ConsentimentoLGPD[] @relation("consentimentos_cliente")
+  favoritos          FavoritoCliente[] @relation("favoritos_cliente")
+  simulacoesFinanciamento SimulacaoFinanciamento[] @relation("simulacoesFinanciamento_cliente")
+  ocorrenciasReportadas OcorrenciaImovel[] @relation("ocorrenciasReportadas_clienteRelator")
+  nomeRazaoSocial    String
+  tipoPessoa         String
+  cpfCnpj            String?
+  dataNascimento     String?
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  profissao          String?
+  rendaMensal        Decimal?
+  finalidades        String[]  @default([])
+  tiposInteresse     String[]  @default([])
+  faixaValorMinimo   Decimal?
+  faixaValorMaximo   Decimal?
+  cidadeInteresse    String?
+  bairrosInteresse   String[]  @default([])
+  canalPreferido     String?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("clientes_filial", fields: [filialId], references: [id])
+@@unique([cpfCnpj, organizationId])
+@@unique([id, organizationId])
+}
+model Condominio {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "condominioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  imoveis            Imovel[] @relation("imoveis_condominio")
+  arquivosKml        ArquivoKml[] @relation("arquivosKml_condominio")
+  nome               String
+  cnpj               String?
+  tipo               String?
+  telefoneAdministracao String?
+  emailAdministracao String?
+  logradouro         String?
+  numero             String?
+  bairro             String?
+  cidade             String?
+  uf                 String?
+  cep                String?
+  valorCondominioReferencia Decimal?
+  infraestrutura     String[]  @default([])
+  regras             String?
+@@unique([id, organizationId])
+}
+model Empreendimento {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "empreendimentoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  unidades           Imovel[] @relation("unidades_empreendimento")
+  arquivosKml        ArquivoKml[] @relation("arquivosKml_empreendimento")
+  nome               String
+  incorporadora      String?
+  construtora        String?
+  status             String
+  dataLancamento     String?
+  previsaoEntrega    String?
+  cidade             String?
+  bairro             String?
+  endereco           String?
+  descricao          String?
+  diferenciais       String[]  @default([])
+  imagens            Json?
+  documentos         Json?
+@@unique([id, organizationId])
+}
+model Imovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "imovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  vinculosCaracteristicas ImovelCaracteristica[] @relation("vinculosCaracteristicas_imovel")
+  midias             MidiaImovel[] @relation("midias_imovel")
+  documentos         DocumentoImovel[] @relation("documentos_imovel")
+  captacoes          CaptacaoImovel[] @relation("captacoes_imovel")
+  avaliacoes         AvaliacaoImovel[] @relation("avaliacoes_imovel")
+  chaves             ChaveImovel[] @relation("chaves_imovel")
+  vistorias          Vistoria[] @relation("vistorias_imovel")
+  anuncios           Anuncio[] @relation("anuncios_imovel")
+  visitas            Visita[] @relation("visitas_imovel")
+  propostas          Proposta[] @relation("propostas_imovel")
+  reservas           ReservaImovel[] @relation("reservas_imovel")
+  vendas             Venda[] @relation("vendas_imovel")
+  locacoes           Locacao[] @relation("locacoes_imovel")
+  solicitacoesManutencao SolicitacaoManutencao[] @relation("solicitacoesManutencao_imovel")
+  despesas           DespesaImovel[] @relation("despesas_imovel")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_imovel")
+  favoritosClientes  FavoritoCliente[] @relation("favoritosClientes_imovel")
+  favoritosPublicos  FavoritoPublico[] @relation("favoritosPublicos_imovel")
+  solicitacoesContato SolicitacaoContato[] @relation("solicitacoesContato_imovel")
+  simulacoesFinanciamento SimulacaoFinanciamento[] @relation("simulacoesFinanciamento_imovel")
+  contratosAdministracao ContratoAdministracao[] @relation("contratosAdministracao_imovel")
+  seguros            SeguroImovel[] @relation("seguros_imovel")
+  ocorrencias        OcorrenciaImovel[] @relation("ocorrencias_imovel")
+  arquivosKml        ArquivoKml[] @relation("arquivosKml_imovel")
+  documentacoesRuraisBrasil DocumentacaoRuralBrasil[] @relation("documentacoesRuraisBrasil_imovel")
+  referenciasClimaticas ReferenciaClimaticaRural[] @relation("referenciasClimaticas_imovel")
+  solosRurais        SoloImovelRural[] @relation("solosRurais_imovel")
+  topografias        TopografiaRural[] @relation("topografias_imovel")
+  recursosHidricos   RecursoHidricoRural[] @relation("recursosHidricos_imovel")
+  energiaConectividade InfraestruturaEnergiaConectividade[] @relation("energiaConectividade_imovel")
+  logisticas         LogisticaRural[] @relation("logisticas_imovel")
+  pistasAviacao      PistaAviacaoRural[] @relation("pistasAviacao_imovel")
+  benfeitoriasRurais BenfeitoriaRural[] @relation("benfeitoriasRurais_imovel")
+  divisoesOperacionais DivisaoOperacionalRural[] @relation("divisoesOperacionais_imovel")
+  producoesHistoricas ProducaoHistoricaRural[] @relation("producoesHistoricas_imovel")
+  sistemasProdutivos SistemaProdutivoRural[] @relation("sistemasProdutivos_imovel")
+  ativosIncluidosVenda AtivoIncluidoVendaRural[] @relation("ativosIncluidosVenda_imovel")
+  restricoesTerritoriais RestricaoTerritorialRural[] @relation("restricoesTerritoriais_imovel")
+  riscosRurais       RiscoRural[] @relation("riscosRurais_imovel")
+  certificacoesSustentabilidade CertificacaoSustentabilidadeRural[] @relation("certificacoesSustentabilidade_imovel")
+  condicoesComerciaisRurais CondicaoComercialRural[] @relation("condicoesComerciaisRurais_imovel")
+  dueDiligences      DueDiligenceRural[] @relation("dueDiligences_imovel")
+  codigo             String
+  titulo             String
+  tipo               String
+  finalidade         String[]  @default([])
+  status             String
+  exclusividade      Boolean   @default(false)
+  valorVenda         Decimal?
+  valorLocacao       Decimal?
+  valorCondominio    Decimal?
+  valorIptuAnual     Decimal?
+  moeda              String
+  logradouro         String
+  numero             String?
+  complemento        String?
+  bairro             String
+  cidade             String
+  uf                 String?
+  cep                String?
+  latitude           Decimal?
+  longitude          Decimal?
+  areaTotal          Decimal?
+  areaPrivativa      Decimal?
+  areaTerreno        Decimal?
+  quartos            Int?
+  suites             Int?
+  banheiros          Int?
+  vagas              Int?
+  andar              Int?
+  anoConstrucao      Int?
+  mobiliado          String?
+  aceitaPet          Boolean   @default(false)
+  aceitaFinanciamento Boolean   @default(false)
+  ocupacao           String?
+  descricao          String?
+  observacoesInternas String?
+  destaque           Boolean   @default(false)
+  publicavel         Boolean   @default(false)
+  imovelRural        Boolean   @default(false)
+  nomeRural          String?
+  municipioRural     String?
+  areaTotalHa        Decimal?
+  modulosFiscais     Decimal?
+  precipitacaoMediaAnualMm Decimal?
+  faixaPluviometrica String?
+  riscoSeca          String?
+  soloPredominante   String?
+  percentualSoloAgricola Decimal?
+  aptidaoAgricolaSolo String?
+  regiaoGeografica   String?
+  nivelDesenvolvimento String?
+  possuiAcessoAereo  Boolean   @default(false)
+  possuiFrenteRio    Boolean   @default(false)
+  nomeCursoAguaPrincipal String?
+  extensaoFrenteRioKm Decimal?
+  areaProdutivaHa    Decimal?
+  percentualAreaProdutiva Decimal?
+  areaPreservadaHa   Decimal?
+  percentualReservaBosque Decimal?
+  areaNaoClassificadaHa Decimal?
+  valorTotalEstimado Decimal?
+  diasNoMercado      Int?
+  capacidadeSuporteUaHa Decimal?
+  capacidadeSuporteCabecas Int?
+  areaIrrigadaHa     Decimal?
+  possuiPistaAviacao Boolean   @default(false)
+  scoreGeralFazenda  Decimal?
+  mapaUsoAlternativo Json?
+  filialId    String @db.Uuid
+  filial             Filial @relation("imoveis_filial", fields: [filialId], references: [id])
+  paisId    String? @db.Uuid
+  pais               Pais? @relation("imoveisPais_pais", fields: [paisId], references: [id])
+  estadoId    String? @db.Uuid
+  estado             Estado? @relation("imoveisEstado_estado", fields: [estadoId], references: [id])
+  cidadeCadastroId    String? @db.Uuid
+  cidadeCadastro     Cidade? @relation("imoveisCidade_cidadeCadastro", fields: [cidadeCadastroId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("imoveis_proprietario", fields: [proprietarioId], references: [id])
+  corretorResponsavelId    String @db.Uuid
+  corretorResponsavel Corretor @relation("imoveisCaptados_corretorResponsavel", fields: [corretorResponsavelId], references: [id])
+  condominioId    String? @db.Uuid
+  condominio         Condominio? @relation("imoveis_condominio", fields: [condominioId], references: [id])
+  empreendimentoId    String? @db.Uuid
+  empreendimento     Empreendimento? @relation("unidades_empreendimento", fields: [empreendimentoId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model CaracteristicaImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "caracteristicaImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  imoveisVinculados  ImovelCaracteristica[] @relation("imoveisVinculados_caracteristica")
+  nome               String
+  grupo              String
+  icone              String?
+  ativa              Boolean   @default(false)
+@@unique([nome, organizationId])
+@@unique([id, organizationId])
+}
+model ImovelCaracteristica {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "imovelCaracteristicaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  valorTexto         String
+  destaque           Boolean   @default(false)
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("vinculosCaracteristicas_imovel", fields: [imovelId], references: [id])
+  caracteristicaId    String @db.Uuid
+  caracteristica     CaracteristicaImovel @relation("imoveisVinculados_caracteristica", fields: [caracteristicaId], references: [id])
+@@unique([id, organizationId])
+}
+model MidiaImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "midiaImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  titulo             String
+  tipo               String
+  imagens            Json?
+  urlExterna         String?
+  ordem              Int?
+  principal          Boolean   @default(false)
+  publica            Boolean   @default(false)
+  legenda            String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("midias_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model DocumentoImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "documentoImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  titulo             String
+  tipo               String
+  numeroDocumento    String?
+  dataEmissao        String?
+  dataValidade       String?
+  arquivos           Json?
+  visibilidade       String
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("documentos_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model CaptacaoImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "captacaoImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigo             String
+  dataCaptacao       String
+  tipo               String
+  status             String
+  dataInicio         String?
+  dataFim            String?
+  percentualComissaoVenda Decimal?
+  percentualAdministracao Decimal?
+  valorMinimoAutorizado Decimal?
+  documentos         Json?
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("captacoesImovel_filial", fields: [filialId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("captacoes_imovel", fields: [imovelId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("captacoes_proprietario", fields: [proprietarioId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("captacoes_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model AvaliacaoImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "avaliacaoImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigo             String
+  dataAvaliacao      String
+  metodo             String
+  valorMercado       Decimal
+  valorVendaRapida   Decimal?
+  valorLocacaoEstimado Decimal?
+  moeda              String
+  validadeAte        String?
+  laudo              Json?
+  criterios          String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("avaliacoes_imovel", fields: [imovelId], references: [id])
+  avaliadorId    String @db.Uuid
+  avaliador          Corretor @relation("avaliacoesRealizadas_avaliador", fields: [avaliadorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model ChaveImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "chaveImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigo             String
+  tipo               String
+  status             String
+  localArmazenamento String?
+  dataRetirada       DateTime? @db.Timestamptz(3)
+  dataPrevistaDevolucao DateTime? @db.Timestamptz(3)
+  dataDevolucao      DateTime? @db.Timestamptz(3)
+  retiradaPor        String?
+  telefoneRetirada   String?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("chaves_imovel", fields: [imovelId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model Vistoria {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "vistoriaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  itens              ItemVistoria[] @relation("itens_vistoria")
+  codigo             String
+  tipo               String
+  dataAgendada       DateTime? @db.Timestamptz(3)
+  dataRealizada      DateTime? @db.Timestamptz(3)
+  status             String
+  responsavelNome    String?
+  assinaturaResponsavel Json?
+  parecerGeral       String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("vistorias_imovel", fields: [imovelId], references: [id])
+  corretorId    String? @db.Uuid
+  corretor           Corretor? @relation("vistoriasResponsaveis_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model ItemVistoria {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "itemVistoriaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  ambiente           String
+  item               String
+  estado             String
+  quantidade         Int?
+  descricao          String?
+  fotos              Json?
+  requerCorrecao     Boolean   @default(false)
+  valorEstimadoCorrecao Decimal?
+  vistoriaId    String @db.Uuid
+  vistoria           Vistoria @relation("itens_vistoria", fields: [vistoriaId], references: [id])
+@@unique([id, organizationId])
+}
+model Anuncio {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "anuncioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  publicacoesPortais PublicacaoPortal[] @relation("publicacoesPortais_anuncio")
+  campanhasVinculadas CampanhaAnuncio[] @relation("campanhasVinculadas_anuncio")
+  leadsGerados       Lead[] @relation("leadsGerados_anuncioOrigem")
+  solicitacoesContato SolicitacaoContato[] @relation("solicitacoesContato_anuncio")
+  titulo             String
+  slug               String?
+  status             String
+  dataInicio         DateTime? @db.Timestamptz(3)
+  dataFim            DateTime? @db.Timestamptz(3)
+  valorDivulgado     Decimal?
+  tituloSeo          String?
+  descricaoSeo       String?
+  palavrasChave      String[]  @default([])
+  textoPublicacao    String?
+  destaque           Boolean   @default(false)
+  aceitaContato      Boolean   @default(false)
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("anuncios_imovel", fields: [imovelId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("anunciosResponsaveis_corretor", fields: [corretorId], references: [id])
+@@unique([slug, organizationId])
+@@unique([id, organizationId])
+}
+model PortalImobiliario {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "portalImobiliarioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  publicacoes        PublicacaoPortal[] @relation("publicacoes_portal")
+  leadsGerados       Lead[] @relation("leadsGerados_portalOrigem")
+  nome               String
+  urlBase            String?
+  tipoIntegracao     String
+  identificadorConta String?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+@@unique([nome, organizationId])
+@@unique([id, organizationId])
+}
+model PublicacaoPortal {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "publicacaoPortalOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigoExterno      String
+  status             String
+  dataEnvio          DateTime? @db.Timestamptz(3)
+  dataAtualizacao    DateTime? @db.Timestamptz(3)
+  urlPublicada       String?
+  mensagemRetorno    String?
+  tentativas         Int?
+  anuncioId    String @db.Uuid
+  anuncio            Anuncio @relation("publicacoesPortais_anuncio", fields: [anuncioId], references: [id])
+  portalId    String @db.Uuid
+  portal             PortalImobiliario @relation("publicacoes_portal", fields: [portalId], references: [id])
+@@unique([id, organizationId])
+}
+model CampanhaMarketing {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "campanhaMarketingOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  anunciosVinculados CampanhaAnuncio[] @relation("anunciosVinculados_campanha")
+  leadsGerados       Lead[] @relation("leadsGerados_campanhaOrigem")
+  nome               String
+  tipo               String
+  status             String
+  dataInicio         String?
+  dataFim            String?
+  orcamento          Decimal?
+  custoReal          Decimal?
+  quantidadeLeads    Int?
+  quantidadeConversoes Int?
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("campanhasMarketing_filial", fields: [filialId], references: [id])
+@@unique([id, organizationId])
+}
+model CampanhaAnuncio {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "campanhaAnuncioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataInclusao       String
+  investimentoAlocado Decimal?
+  impressoes         Int?
+  cliques            Int?
+  leadsGerados       Int?
+  campanhaId    String @db.Uuid
+  campanha           CampanhaMarketing @relation("anunciosVinculados_campanha", fields: [campanhaId], references: [id])
+  anuncioId    String @db.Uuid
+  anuncio            Anuncio @relation("campanhasVinculadas_anuncio", fields: [anuncioId], references: [id])
+@@unique([id, organizationId])
+}
+model Lead {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "leadOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  interacoes         InteracaoLead[] @relation("interacoes_lead")
+  tarefas            TarefaComercial[] @relation("tarefas_lead")
+  visitas            Visita[] @relation("visitas_lead")
+  propostas          Proposta[] @relation("propostas_lead")
+  consentimentos     ConsentimentoLGPD[] @relation("consentimentos_lead")
+  nome               String
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  origem             String
+  status             String
+  temperatura        String
+  dataEntrada        DateTime  @db.Timestamptz(3)
+  proximoContato     DateTime? @db.Timestamptz(3)
+  finalidade         String?
+  faixaValor         Decimal?
+  mensagemInicial    String?
+  motivoPerda        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("leads_filial", fields: [filialId], references: [id])
+  corretorResponsavelId    String @db.Uuid
+  corretorResponsavel Corretor @relation("leadsResponsaveis_corretorResponsavel", fields: [corretorResponsavelId], references: [id])
+  anuncioOrigemId    String? @db.Uuid
+  anuncioOrigem      Anuncio? @relation("leadsGerados_anuncioOrigem", fields: [anuncioOrigemId], references: [id])
+  campanhaOrigemId    String? @db.Uuid
+  campanhaOrigem     CampanhaMarketing? @relation("leadsGerados_campanhaOrigem", fields: [campanhaOrigemId], references: [id])
+  portalOrigemId    String? @db.Uuid
+  portalOrigem       PortalImobiliario? @relation("leadsGerados_portalOrigem", fields: [portalOrigemId], references: [id])
+  clienteConvertidoId    String? @db.Uuid
+  clienteConvertido  Cliente? @relation("historicoLeads_clienteConvertido", fields: [clienteConvertidoId], references: [id])
+@@unique([id, organizationId])
+}
+model InteracaoLead {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "interacaoLeadOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataHora           DateTime  @db.Timestamptz(3)
+  tipo               String
+  resultado          String?
+  assunto            String
+  descricao          String?
+  proximaAcao        String?
+  dataProximaAcao    DateTime? @db.Timestamptz(3)
+  leadId    String @db.Uuid
+  lead               Lead @relation("interacoes_lead", fields: [leadId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("interacoesRealizadas_corretor", fields: [corretorId], references: [id])
+@@unique([id, organizationId])
+}
+model TarefaComercial {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "tarefaComercialOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  titulo             String
+  tipo               String
+  prioridade         String
+  status             String
+  dataLimite         DateTime? @db.Timestamptz(3)
+  dataConclusao      DateTime? @db.Timestamptz(3)
+  descricao          String?
+  leadId    String? @db.Uuid
+  lead               Lead? @relation("tarefas_lead", fields: [leadId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("tarefasAtribuidas_corretor", fields: [corretorId], references: [id])
+  clienteId    String? @db.Uuid
+  cliente            Cliente? @relation("tarefasRelacionadas_cliente", fields: [clienteId], references: [id])
+@@unique([id, organizationId])
+}
+model Visita {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "visitaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  propostas          Proposta[] @relation("propostas_visitaOrigem")
+  codigo             String
+  dataInicio         DateTime  @db.Timestamptz(3)
+  dataFim            DateTime? @db.Timestamptz(3)
+  status             String
+  tipo               String
+  pontoEncontro      String?
+  feedbackCliente    String?
+  interessePosVisita String?
+  observacoesInternas String?
+  leadId    String? @db.Uuid
+  lead               Lead? @relation("visitas_lead", fields: [leadId], references: [id])
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("visitas_cliente", fields: [clienteId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("visitas_imovel", fields: [imovelId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("visitasConduzidas_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model Proposta {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "propostaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  condicoes          CondicaoProposta[] @relation("condicoes_proposta")
+  reservas           ReservaImovel[] @relation("reservas_proposta")
+  vendasGeradas      Venda[] @relation("vendasGeradas_proposta")
+  locacoesGeradas    Locacao[] @relation("locacoesGeradas_proposta")
+  simulacoesFinanciamento SimulacaoFinanciamento[] @relation("simulacoesFinanciamento_proposta")
+  codigo             String
+  tipo               String
+  dataProposta       String
+  validadeAte        DateTime? @db.Timestamptz(3)
+  status             String
+  valorProposto      Decimal
+  moeda              String
+  sinal              Decimal?
+  formaPagamento     String?
+  percentualComissao Decimal?
+  termos             String?
+  documentos         Json?
+  motivoRecusa       String?
+  visitaOrigemId    String? @db.Uuid
+  visitaOrigem       Visita? @relation("propostas_visitaOrigem", fields: [visitaOrigemId], references: [id])
+  leadId    String? @db.Uuid
+  lead               Lead? @relation("propostas_lead", fields: [leadId], references: [id])
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("propostas_cliente", fields: [clienteId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("propostas_imovel", fields: [imovelId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("propostasIntermediadas_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model CondicaoProposta {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "condicaoPropostaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  ordem              Int?
+  tipo               String
+  descricao          String
+  obrigatoria        Boolean   @default(false)
+  atendida           Boolean   @default(false)
+  propostaId    String @db.Uuid
+  proposta           Proposta @relation("condicoes_proposta", fields: [propostaId], references: [id])
+@@unique([id, organizationId])
+}
+model ReservaImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "reservaImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigo             String
+  dataInicio         DateTime  @db.Timestamptz(3)
+  dataFim            DateTime? @db.Timestamptz(3)
+  status             String
+  valorSinal         Decimal?
+  formaPagamentoSinal String?
+  comprovante        Json?
+  observacoes        String?
+  propostaId    String? @db.Uuid
+  proposta           Proposta? @relation("reservas_proposta", fields: [propostaId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("reservas_imovel", fields: [imovelId], references: [id])
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("reservas_cliente", fields: [clienteId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("reservasGerenciadas_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model Venda {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "vendaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  contratos          ContratoVenda[] @relation("contratos_venda")
+  parcelas           ParcelaVenda[] @relation("parcelas_venda")
+  comissoes          Comissao[] @relation("comissoes_venda")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_venda")
+  codigo             String
+  dataVenda          String
+  status             String
+  valorVenda         Decimal
+  moeda              String
+  valorSinal         Decimal?
+  valorFinanciado    Decimal?
+  valorPermuta       Decimal?
+  dataPrevisaoEscritura String?
+  dataEscritura      String?
+  cartorio           String?
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("vendas_filial", fields: [filialId], references: [id])
+  propostaId    String? @db.Uuid
+  proposta           Proposta? @relation("vendasGeradas_proposta", fields: [propostaId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("vendas_imovel", fields: [imovelId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("vendasComoProprietario_proprietario", fields: [proprietarioId], references: [id])
+  compradorId    String @db.Uuid
+  comprador          Cliente @relation("compras_comprador", fields: [compradorId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("vendasIntermediadas_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model ContratoVenda {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "contratoVendaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  numero             String
+  tipo               String
+  status             String
+  dataEmissao        String?
+  dataAssinatura     String?
+  dataRegistro       String?
+  arquivos           Json?
+  assinaturaEletronicaId String?
+  observacoes        String?
+  vendaId    String @db.Uuid
+  venda              Venda @relation("contratos_venda", fields: [vendaId], references: [id])
+@@unique([numero, organizationId])
+@@unique([id, organizationId])
+}
+model ParcelaVenda {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "parcelaVendaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  numeroParcela      Int
+  dataVencimento     String
+  valor              Decimal
+  status             String
+  dataPagamento      String?
+  valorPago          Decimal?
+  formaPagamento     String?
+  comprovantes       Json?
+  vendaId    String @db.Uuid
+  venda              Venda @relation("parcelas_venda", fields: [vendaId], references: [id])
+@@unique([id, organizationId])
+}
+model Locacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "locacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  participantes      ParticipanteLocacao[] @relation("participantes_locacao")
+  garantias          GarantiaLocacao[] @relation("garantias_locacao")
+  contratos          ContratoLocacao[] @relation("contratos_locacao")
+  cobrancas          CobrancaLocacao[] @relation("cobrancas_locacao")
+  reajustes          ReajusteLocacao[] @relation("reajustes_locacao")
+  repasses           RepasseProprietario[] @relation("repasses_locacao")
+  comissoes          Comissao[] @relation("comissoes_locacao")
+  solicitacoesManutencao SolicitacaoManutencao[] @relation("solicitacoesManutencao_locacao")
+  despesas           DespesaImovel[] @relation("despesas_locacao")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_locacao")
+  seguros            SeguroImovel[] @relation("seguros_locacao")
+  ocorrencias        OcorrenciaImovel[] @relation("ocorrencias_locacao")
+  codigo             String
+  status             String
+  dataInicio         String?
+  dataFim            String?
+  valorAluguel       Decimal
+  valorCondominio    Decimal?
+  valorIptuMensal    Decimal?
+  taxaAdministracaoPercentual Decimal?
+  diaVencimento      Int?
+  indiceReajuste     String?
+  periodicidadeReajusteMeses Int?
+  multaAtrasoPercentual Decimal?
+  jurosMesPercentual Decimal?
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("locacoes_filial", fields: [filialId], references: [id])
+  propostaId    String? @db.Uuid
+  proposta           Proposta? @relation("locacoesGeradas_proposta", fields: [propostaId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("locacoes_imovel", fields: [imovelId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("locacoes_proprietario", fields: [proprietarioId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("locacoesIntermediadas_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model ParticipanteLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "participanteLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  papel              String
+  percentualResponsabilidade Decimal?
+  aprovadoCadastro   Boolean   @default(false)
+  dataAprovacao      String?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("participantes_locacao", fields: [locacaoId], references: [id])
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("participacoesLocacao_cliente", fields: [clienteId], references: [id])
+@@unique([id, organizationId])
+}
+model GarantiaLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "garantiaLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipo               String
+  status             String
+  valorGarantia      Decimal?
+  garantidorNome     String?
+  garantidorCpfCnpj  String?
+  seguradora         String?
+  numeroApolice      String?
+  validadeAte        String?
+  documentos         Json?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("garantias_locacao", fields: [locacaoId], references: [id])
+@@unique([id, organizationId])
+}
+model ContratoLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "contratoLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  numero             String
+  tipo               String
+  status             String
+  dataEmissao        String?
+  dataAssinatura     String?
+  arquivos           Json?
+  assinaturaEletronicaId String?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("contratos_locacao", fields: [locacaoId], references: [id])
+@@unique([numero, organizationId])
+@@unique([id, organizationId])
+}
+model CobrancaLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "cobrancaLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  pagamentos         PagamentoLocacao[] @relation("pagamentos_cobranca")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_cobrancaLocacao")
+  competencia        String
+  dataVencimento     String
+  status             String
+  valorAluguel       Decimal?
+  valorCondominio    Decimal?
+  valorIptu          Decimal?
+  valorSeguro        Decimal?
+  valorMulta         Decimal?
+  valorJuros         Decimal?
+  valorDescontos     Decimal?
+  valorTotal         Decimal
+  linhaDigitavel     String?
+  urlBoleto          String?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("cobrancas_locacao", fields: [locacaoId], references: [id])
+@@unique([id, organizationId])
+}
+model PagamentoLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "pagamentoLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataPagamento      DateTime  @db.Timestamptz(3)
+  valorPago          Decimal
+  formaPagamento     String
+  identificadorTransacao String
+  status             String
+  comprovantes       Json?
+  observacoes        String?
+  cobrancaId    String @db.Uuid
+  cobranca           CobrancaLocacao @relation("pagamentos_cobranca", fields: [cobrancaId], references: [id])
+@@unique([id, organizationId])
+}
+model ReajusteLocacao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "reajusteLocacaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataBase           String
+  indice             String
+  percentual         Decimal
+  valorAnterior      Decimal?
+  valorNovo          Decimal
+  status             String
+  documentos         Json?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("reajustes_locacao", fields: [locacaoId], references: [id])
+@@unique([id, organizationId])
+}
+model RepasseProprietario {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "repasseProprietarioOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_repasseProprietario")
+  competencia        String
+  dataPrevista       String?
+  dataRepasse        String?
+  status             String
+  valorRecebido      Decimal?
+  taxaAdministracao  Decimal?
+  despesasDescontadas Decimal?
+  impostosRetidos    Decimal?
+  valorLiquido       Decimal
+  comprovante        Json?
+  observacoes        String?
+  locacaoId    String @db.Uuid
+  locacao            Locacao @relation("repasses_locacao", fields: [locacaoId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("repasses_proprietario", fields: [proprietarioId], references: [id])
+@@unique([id, organizationId])
+}
+model Comissao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "comissaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  pagamentos         PagamentoComissao[] @relation("pagamentos_comissao")
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_comissao")
+  codigo             String
+  tipo               String
+  baseCalculo        Decimal?
+  percentual         Decimal?
+  valorComissao      Decimal
+  status             String
+  dataCompetencia    String?
+  observacoes        String?
+  vendaId    String? @db.Uuid
+  venda              Venda? @relation("comissoes_venda", fields: [vendaId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("comissoes_locacao", fields: [locacaoId], references: [id])
+  corretorId    String @db.Uuid
+  corretor           Corretor @relation("comissoes_corretor", fields: [corretorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model PagamentoComissao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "pagamentoComissaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataPagamento      String
+  valor              Decimal
+  formaPagamento     String
+  status             String
+  comprovante        Json?
+  observacoes        String?
+  comissaoId    String @db.Uuid
+  comissao           Comissao @relation("pagamentos_comissao", fields: [comissaoId], references: [id])
+@@unique([id, organizationId])
+}
+model Fornecedor {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "fornecedorOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  ordensServico      OrdemServico[] @relation("ordensServico_fornecedor")
+  despesas           DespesaImovel[] @relation("despesas_fornecedor")
+  nomeRazaoSocial    String
+  tipoPessoa         String?
+  cpfCnpj            String?
+  categorias         String[]  @default([])
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  cidade             String?
+  uf                 String?
+  avaliacao          Decimal?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("fornecedores_filial", fields: [filialId], references: [id])
+@@unique([cpfCnpj, organizationId])
+@@unique([id, organizationId])
+}
+model SolicitacaoManutencao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "solicitacaoManutencaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  ordensServico      OrdemServico[] @relation("ordensServico_solicitacao")
+  codigo             String
+  dataAbertura       DateTime  @db.Timestamptz(3)
+  origem             String
+  categoria          String
+  prioridade         String
+  status             String
+  titulo             String
+  descricao          String
+  imagens            Json?
+  responsabilidadeCusto String?
+  valorLimiteAutorizado Decimal?
+  dataConclusao      DateTime? @db.Timestamptz(3)
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("solicitacoesManutencao_imovel", fields: [imovelId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("solicitacoesManutencao_locacao", fields: [locacaoId], references: [id])
+  clienteSolicitanteId    String? @db.Uuid
+  clienteSolicitante Cliente? @relation("solicitacoesAbertas_clienteSolicitante", fields: [clienteSolicitanteId], references: [id])
+  corretorResponsavelId    String? @db.Uuid
+  corretorResponsavel Corretor? @relation("solicitacoesGerenciadas_corretorResponsavel", fields: [corretorResponsavelId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model OrdemServico {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "ordemServicoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  despesas           DespesaImovel[] @relation("despesas_ordemServico")
+  codigo             String
+  status             String
+  dataEmissao        String
+  dataAgendada       DateTime? @db.Timestamptz(3)
+  dataConclusao      DateTime? @db.Timestamptz(3)
+  descricaoServico   String
+  valorOrcado        Decimal?
+  valorAprovado      Decimal?
+  valorFinal         Decimal?
+  documentos         Json?
+  fotosAntes         Json?
+  fotosDepois        Json?
+  avaliacaoServico   Decimal?
+  solicitacaoId    String @db.Uuid
+  solicitacao        SolicitacaoManutencao @relation("ordensServico_solicitacao", fields: [solicitacaoId], references: [id])
+  fornecedorId    String @db.Uuid
+  fornecedor         Fornecedor @relation("ordensServico_fornecedor", fields: [fornecedorId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model DespesaImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "despesaImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  lancamentosFinanceiros LancamentoFinanceiro[] @relation("lancamentosFinanceiros_despesaImovel")
+  descricao          String
+  categoria          String
+  dataCompetencia    String?
+  dataVencimento     String?
+  dataPagamento      String?
+  valor              Decimal
+  status             String
+  responsavelPagamento String?
+  documentos         Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("despesas_imovel", fields: [imovelId], references: [id])
+  fornecedorId    String? @db.Uuid
+  fornecedor         Fornecedor? @relation("despesas_fornecedor", fields: [fornecedorId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("despesas_locacao", fields: [locacaoId], references: [id])
+  ordemServicoId    String? @db.Uuid
+  ordemServico       OrdemServico? @relation("despesas_ordemServico", fields: [ordemServicoId], references: [id])
+@@unique([id, organizationId])
+}
+model ContaFinanceira {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "contaFinanceiraOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  lancamentos        LancamentoFinanceiro[] @relation("lancamentos_contaFinanceira")
+  nome               String
+  tipo               String
+  banco              String?
+  agencia            String?
+  numeroConta        String?
+  moeda              String
+  saldoInicial       Decimal?
+  ativa              Boolean   @default(false)
+  filialId    String @db.Uuid
+  filial             Filial @relation("contasFinanceiras_filial", fields: [filialId], references: [id])
+@@unique([nome, organizationId])
+@@unique([id, organizationId])
+}
+model CategoriaFinanceira {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "categoriaFinanceiraOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  lancamentos        LancamentoFinanceiro[] @relation("lancamentos_categoriaFinanceira")
+  nome               String
+  tipo               String
+  grupo              String?
+  codigoContabil     String?
+  ativa              Boolean   @default(false)
+@@unique([nome, organizationId])
+@@unique([id, organizationId])
+}
+model LancamentoFinanceiro {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "lancamentoFinanceiroOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  descricao          String
+  tipo               String
+  status             String
+  dataCompetencia    String
+  dataVencimento     String?
+  dataRealizacao     String?
+  valor              Decimal
+  moeda              String
+  formaPagamento     String?
+  documentos         Json?
+  observacoes        String?
+  filialId    String @db.Uuid
+  filial             Filial @relation("lancamentosFinanceiros_filial", fields: [filialId], references: [id])
+  contaFinanceiraId    String @db.Uuid
+  contaFinanceira    ContaFinanceira @relation("lancamentos_contaFinanceira", fields: [contaFinanceiraId], references: [id])
+  categoriaFinanceiraId    String @db.Uuid
+  categoriaFinanceira CategoriaFinanceira @relation("lancamentos_categoriaFinanceira", fields: [categoriaFinanceiraId], references: [id])
+  imovelId    String? @db.Uuid
+  imovel             Imovel? @relation("lancamentosFinanceiros_imovel", fields: [imovelId], references: [id])
+  vendaId    String? @db.Uuid
+  venda              Venda? @relation("lancamentosFinanceiros_venda", fields: [vendaId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("lancamentosFinanceiros_locacao", fields: [locacaoId], references: [id])
+  cobrancaLocacaoId    String? @db.Uuid
+  cobrancaLocacao    CobrancaLocacao? @relation("lancamentosFinanceiros_cobrancaLocacao", fields: [cobrancaLocacaoId], references: [id])
+  repasseProprietarioId    String? @db.Uuid
+  repasseProprietario RepasseProprietario? @relation("lancamentosFinanceiros_repasseProprietario", fields: [repasseProprietarioId], references: [id])
+  comissaoId    String? @db.Uuid
+  comissao           Comissao? @relation("lancamentosFinanceiros_comissao", fields: [comissaoId], references: [id])
+  despesaImovelId    String? @db.Uuid
+  despesaImovel      DespesaImovel? @relation("lancamentosFinanceiros_despesaImovel", fields: [despesaImovelId], references: [id])
+@@unique([id, organizationId])
+}
+model DocumentoPessoa {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "documentoPessoaOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  titulo             String
+  tipo               String
+  numero             String?
+  dataEmissao        String?
+  dataValidade       String?
+  arquivos           Json?
+  statusValidacao    String
+  observacoes        String?
+  proprietarioId    String? @db.Uuid
+  proprietario       Proprietario? @relation("documentosPessoais_proprietario", fields: [proprietarioId], references: [id])
+  clienteId    String? @db.Uuid
+  cliente            Cliente? @relation("documentosPessoais_cliente", fields: [clienteId], references: [id])
+  corretorId    String? @db.Uuid
+  corretor           Corretor? @relation("documentosPessoais_corretor", fields: [corretorId], references: [id])
+@@unique([id, organizationId])
+}
+model ConsentimentoLGPD {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "consentimentoLGPDOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipo               String
+  versaoTermo        String
+  dataConsentimento  DateTime  @db.Timestamptz(3)
+  status             String
+  dataRevogacao      DateTime? @db.Timestamptz(3)
+  ipOrigem           String?
+  canal              String?
+  comprovante        Json?
+  observacoes        String?
+  clienteId    String? @db.Uuid
+  cliente            Cliente? @relation("consentimentos_cliente", fields: [clienteId], references: [id])
+  proprietarioId    String? @db.Uuid
+  proprietario       Proprietario? @relation("consentimentos_proprietario", fields: [proprietarioId], references: [id])
+  leadId    String? @db.Uuid
+  lead               Lead? @relation("consentimentos_lead", fields: [leadId], references: [id])
+@@unique([id, organizationId])
+}
+model FavoritoCliente {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "favoritoClienteOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataInclusao       DateTime  @db.Timestamptz(3)
+  observacoes        String?
+  ativo              Boolean   @default(false)
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("favoritos_cliente", fields: [clienteId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("favoritosClientes_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+
+model FavoritoPublico {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "favoritoPublicoOrganization")
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade, map: "favoritoPublicoUser")
+  imovelId       String       @db.Uuid
+  imovel         Imovel       @relation("favoritosPublicos_imovel", fields: [imovelId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, userId, imovelId])
+  @@index([organizationId, userId])
+  @@index([imovelId])
+}
+model SolicitacaoContato {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "solicitacaoContatoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  telefone           String?
+  email              String?
+  canalOrigem        String
+  dataHora           DateTime  @db.Timestamptz(3)
+  status             String
+  mensagem           String
+  consentiuContato   Boolean   @default(false)
+  imovelId    String? @db.Uuid
+  imovel             Imovel? @relation("solicitacoesContato_imovel", fields: [imovelId], references: [id])
+  anuncioId    String? @db.Uuid
+  anuncio            Anuncio? @relation("solicitacoesContato_anuncio", fields: [anuncioId], references: [id])
+  corretorResponsavelId    String? @db.Uuid
+  corretorResponsavel Corretor? @relation("solicitacoesAtendidas_corretorResponsavel", fields: [corretorResponsavelId], references: [id])
+@@unique([id, organizationId])
+}
+model SimulacaoFinanciamento {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "simulacaoFinanciamentoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  dataSimulacao      DateTime  @db.Timestamptz(3)
+  valorImovel        Decimal
+  valorEntrada       Decimal?
+  valorFinanciado    Decimal?
+  prazoMeses         Int?
+  taxaJurosAnual     Decimal?
+  sistemaAmortizacao String?
+  valorParcelaInicial Decimal?
+  instituicaoFinanceira String?
+  status             String?
+  observacoes        String?
+  clienteId    String @db.Uuid
+  cliente            Cliente @relation("simulacoesFinanciamento_cliente", fields: [clienteId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("simulacoesFinanciamento_imovel", fields: [imovelId], references: [id])
+  propostaId    String? @db.Uuid
+  proposta           Proposta? @relation("simulacoesFinanciamento_proposta", fields: [propostaId], references: [id])
+@@unique([id, organizationId])
+}
+model ContratoAdministracao {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "contratoAdministracaoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  numero             String
+  status             String
+  dataInicio         String?
+  dataFim            String?
+  taxaAdministracaoPercentual Decimal?
+  taxaIntermediacaoPercentual Decimal?
+  prazoRepasseDias   Int?
+  autorizaManutencaoAte Decimal?
+  arquivos           Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("contratosAdministracao_imovel", fields: [imovelId], references: [id])
+  proprietarioId    String @db.Uuid
+  proprietario       Proprietario @relation("contratosAdministracao_proprietario", fields: [proprietarioId], references: [id])
+  filialId    String @db.Uuid
+  filial             Filial @relation("contratosAdministracao_filial", fields: [filialId], references: [id])
+@@unique([numero, organizationId])
+@@unique([id, organizationId])
+}
+model SeguroImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "seguroImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipo               String
+  seguradora         String
+  numeroApolice      String
+  dataInicio         String?
+  dataFim            String?
+  valorPremio        Decimal?
+  valorCobertura     Decimal?
+  status             String
+  documentos         Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("seguros_imovel", fields: [imovelId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("seguros_locacao", fields: [locacaoId], references: [id])
+@@unique([numeroApolice, organizationId])
+@@unique([id, organizationId])
+}
+model OcorrenciaImovel {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "ocorrenciaImovelOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  codigo             String
+  dataHora           DateTime  @db.Timestamptz(3)
+  tipo               String
+  gravidade          String
+  status             String
+  titulo             String
+  descricao          String
+  anexos             Json?
+  dataResolucao      DateTime? @db.Timestamptz(3)
+  resolucao          String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("ocorrencias_imovel", fields: [imovelId], references: [id])
+  locacaoId    String? @db.Uuid
+  locacao            Locacao? @relation("ocorrencias_locacao", fields: [locacaoId], references: [id])
+  clienteRelatorId    String? @db.Uuid
+  clienteRelator     Cliente? @relation("ocorrenciasReportadas_clienteRelator", fields: [clienteRelatorId], references: [id])
+  corretorResponsavelId    String? @db.Uuid
+  corretorResponsavel Corretor? @relation("ocorrenciasGerenciadas_corretorResponsavel", fields: [corretorResponsavelId], references: [id])
+@@unique([codigo, organizationId])
+@@unique([id, organizationId])
+}
+model ArquivoKml {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "arquivoKmlOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  versoesPosteriores ArquivoKml[] @relation("versoesPosteriores_versaoAnterior")
+  nome               String
+  tipoArquivo        String
+  arquivo            Json?
+  descricao          String?
+  versao             String?
+  statusProcessamento String
+  sistemaReferencia  String?
+  camada             String?
+  visivel            Boolean   @default(false)
+  ordemExibicao      Int?
+  latitudeMin        Decimal?
+  longitudeMin       Decimal?
+  latitudeMax        Decimal?
+  longitudeMax       Decimal?
+  quantidadePontos   Int?
+  quantidadeLinhas   Int?
+  quantidadePoligonos Int?
+  areaCalculadaM2    Decimal?
+  dataProcessamento  DateTime? @db.Timestamptz(3)
+  erroProcessamento  String?
+  checksumSha256     String?
+  origem             String?
+  observacoes        String?
+  documentacaoRuralBrasilId    String? @db.Uuid
+  documentacaoRuralBrasil DocumentacaoRuralBrasil? @relation("arquivosKml_documentacaoRuralBrasil", fields: [documentacaoRuralBrasilId], references: [id])
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("arquivosKml_imovel", fields: [imovelId], references: [id])
+  empreendimentoId    String? @db.Uuid
+  empreendimento     Empreendimento? @relation("arquivosKml_empreendimento", fields: [empreendimentoId], references: [id])
+  condominioId    String? @db.Uuid
+  condominio         Condominio? @relation("arquivosKml_condominio", fields: [condominioId], references: [id])
+  cadastradoPorId    String? @db.Uuid
+  cadastradoPor      Member? @relation("arquivoKmlCadastradoPor_cadastradoPor", fields: [cadastradoPorId], references: [id])
+  versaoAnteriorId    String? @db.Uuid
+  versaoAnterior     ArquivoKml? @relation("versoesPosteriores_versaoAnterior", fields: [versaoAnteriorId], references: [id])
+@@unique([id, organizationId])
+}
+model DocumentacaoRuralBrasil {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "documentacaoRuralBrasilOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  arquivosKml        ArquivoKml[] @relation("arquivosKml_documentacaoRuralBrasil")
+  situacaoDocumental String?
+  matriculaNumero    String
+  matriculaLivro     String?
+  matriculaCartorio  String?
+  matriculaComarca   String?
+  matriculaUf        String?
+  matriculaDataAtualizacao String?
+  matriculaArquivo   Json?
+  codigoSncrIncra    String?
+  ccirExercicio      Int?
+  ccirNumero         String?
+  ccirSituacao       String?
+  ccirDataEmissao    String?
+  ccirTaxaQuitada    Boolean   @default(false)
+  ccirArquivo        Json?
+  cib                String?
+  cafirSituacao      String?
+  cnirVinculado      Boolean   @default(false)
+  comprovanteCafir   Json?
+  itrUltimoExercicio Int?
+  ditrEntregue       Boolean   @default(false)
+  numeroReciboDitr   String?
+  valorItr           Decimal?
+  itrQuitado         Boolean   @default(false)
+  ditrArquivo        Json?
+  cndImovelRuralSituacao String?
+  cndImovelRuralDataEmissao String?
+  cndImovelRuralDataValidade String?
+  cndImovelRuralArquivo Json?
+  carNumeroRegistro  String?
+  carSituacao        String?
+  carReciboArquivo   Json?
+  carDemonstrativoArquivo Json?
+  areaAppHa          Decimal?
+  areaReservaLegalHa Decimal?
+  areaVegetacaoNativaHa Decimal?
+  areaUsoRestritoHa  Decimal?
+  areaConsolidadaHa  Decimal?
+  praSituacao        String?
+  termoPraArquivo    Json?
+  sigefCertificado   Boolean   @default(false)
+  sigefParcelaCodigo String?
+  sigefDataCertificacao String?
+  sigefSituacao      String?
+  sigefArquivo       Json?
+  memorialDescritivoArquivo Json?
+  plantaGeorreferenciadaArquivo Json?
+  artRrtTrtArquivo   Json?
+  responsavelTecnicoNome String?
+  responsavelTecnicoRegistro String?
+  possuiOnusReais    Boolean   @default(false)
+  descricaoOnusReais String?
+  certidaoOnusArquivo Json?
+  possuiAcaoRealReipersecutoria Boolean   @default(false)
+  certidaoAcoesArquivo Json?
+  tituloAquisicaoArquivo Json?
+  cadeiaDominialVerificada Boolean   @default(false)
+  cadeiaDominialObservacoes String?
+  possuiArrendamento Boolean   @default(false)
+  arrendamentoArquivo Json?
+  possuiParceriaRural Boolean   @default(false)
+  parceriaRuralArquivo Json?
+  licenciamentoAmbientalSituacao String?
+  licencasAmbientaisArquivo Json?
+  outorgaAguaSituacao String?
+  outorgaAguaArquivo Json?
+  embargoAmbiental   Boolean   @default(false)
+  embargoAmbientalObservacoes String?
+  documentacaoConferidaEm String?
+  proximaRevisaoDocumental String?
+  pendenciasDocumentais String?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("documentacoesRuraisBrasil_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model ReferenciaClimaticaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "referenciaClimaticaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipoReferencia     String?
+  titulo             String
+  descricao          String?
+  pais               String?
+  estadoDepartamentoProvincia String?
+  municipioDistrito  String?
+  regiaoClimatica    String?
+  precipitacaoMediaAnualMm Decimal?
+  precipitacaoMinimaReferenciaMm Decimal?
+  precipitacaoMaximaReferenciaMm Decimal?
+  faixaPluviometrica String?
+  mesMaisChuvoso     String?
+  mesMaisSeco        String?
+  inicioPeriodoChuvoso String?
+  fimPeriodoChuvoso  String?
+  diasChuvaAno       Int?
+  temperaturaMediaAnualC Decimal?
+  temperaturaMinimaMediaC Decimal?
+  temperaturaMaximaMediaC Decimal?
+  riscoSeca          String?
+  riscoEncharcamento String?
+  riscoGeada         String?
+  indiceAridez       Decimal?
+  periodoClimatologicoInicio Int?
+  periodoClimatologicoFim Int?
+  estacaoMeteorologica String?
+  distanciaEstacaoKm Decimal?
+  fonteDados         String?
+  urlFonte           String?
+  dataConsulta       String?
+  mapaClimatico      Json?
+  arquivoDados       Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("referenciasClimaticas_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model TipoSolo {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "tipoSoloOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  areasImoveis       SoloImovelRural[] @relation("areasImoveis_tipoSolo")
+  nome               String
+  codigo             String?
+  descricao          String?
+  classeTextural     String?
+  origem             String?
+  corPredominante    String?
+  drenagem           String?
+  fertilidadeNatural String?
+  materiaOrganica    String?
+  acidez             String?
+  riscoErosao        String?
+  riscoCompactacao   String?
+  riscoEncharcamento String?
+  aptidaoAgricola    String?
+  aptidaoPastagem    String?
+  aptidaoFlorestal   String?
+  observacoes        String?
+  fonteClassificacao String?
+  mapaReferencia     Json?
+@@unique([id, organizationId])
+}
+model SoloImovelRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "soloImovelRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nomeArea           String
+  areaHa             Decimal?
+  percentualImovel   Decimal?
+  profundidadeMediaCm Decimal?
+  declividadeMediaPercentual Decimal?
+  phMedio            Decimal?
+  materiaOrganicaPercentual Decimal?
+  teorArgilaPercentual Decimal?
+  teorAreiaPercentual Decimal?
+  teorSiltePercentual Decimal?
+  capacidadeUso      String?
+  usoAtual           String?
+  usoRecomendado     String?
+  necessitaCorrecao  Boolean   @default(false)
+  correcaoRecomendada String?
+  analiseSoloData    String?
+  analiseSoloArquivo Json?
+  mapaSoloArquivo    Json?
+  arquivoKmlSolo     Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("solosRurais_imovel", fields: [imovelId], references: [id])
+  tipoSoloId    String @db.Uuid
+  tipoSolo           TipoSolo @relation("areasImoveis_tipoSolo", fields: [tipoSoloId], references: [id])
+@@unique([id, organizationId])
+}
+model TopografiaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "topografiaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  descricao          String
+  tipoRelevo         String?
+  altitudeMinimaM    Decimal?
+  altitudeMaximaM    Decimal?
+  altitudeMediaM     Decimal?
+  declividadeMediaPercentual Decimal?
+  declividadeMaximaPercentual Decimal?
+  areaPlanaPercentual Decimal?
+  areaOnduladaPercentual Decimal?
+  riscoErosao        String?
+  mapaTopografico    Json?
+  arquivoDem         Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("topografias_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model RecursoHidricoRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "recursoHidricoRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  perene             Boolean   @default(false)
+  navegavel          Boolean   @default(false)
+  extensaoNaPropriedadeKm Decimal?
+  frentePropriedadeKm Decimal?
+  vazaoEstimada      Decimal?
+  unidadeVazao       String?
+  qualidadeAgua      String?
+  sazonalidade       String?
+  usoGado            Boolean   @default(false)
+  usoIrrigacao       Boolean   @default(false)
+  usoHumano          Boolean   @default(false)
+  capacidadeAbastecimentoCabecas Int?
+  areaIrrigavelHa    Decimal?
+  outorgaNecessaria  Boolean   @default(false)
+  outorgaSituacao    String?
+  documentoOutorga   Json?
+  kml                Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("recursosHidricos_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model InfraestruturaEnergiaConectividade {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "infraestruturaEnergiaConectividadeOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  descricao          String
+  energiaDisponivel  Boolean   @default(false)
+  tipoRede           String?
+  potenciaInstaladaKva Decimal?
+  quantidadeTransformadores Int?
+  gerador            Boolean   @default(false)
+  energiaSolar       Boolean   @default(false)
+  potenciaSolarKw    Decimal?
+  distanciaRedeEnergiaKm Decimal?
+  internetFibra      Boolean   @default(false)
+  internetRadio      Boolean   @default(false)
+  starlink           Boolean   @default(false)
+  sinalCelular       String?
+  operadorasDisponiveis String?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("energiaConectividade_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model LogisticaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "logisticaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  descricao          String
+  tipoAcessoPrincipal String?
+  distanciaAsfaltoKm Decimal?
+  transitavelAnoTodo Boolean   @default(false)
+  restricaoEpocaChuva Boolean   @default(false)
+  acessoCaminhaoBitrem Boolean   @default(false)
+  acessoRodotrem     Boolean   @default(false)
+  distanciaCidadeKm  Decimal?
+  distanciaSiloKm    Decimal?
+  distanciaFrigorificoKm Decimal?
+  distanciaCooperativaKm Decimal?
+  distanciaPortoKm   Decimal?
+  distanciaFerroviaKm Decimal?
+  distanciaAeroportoKm Decimal?
+  distanciaRodoviaPrincipalKm Decimal?
+  pontesInternas     Int?
+  estradasInternasKm Decimal?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("logisticas_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model PistaAviacaoRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "pistaAviacaoRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  habilitada         Boolean   @default(false)
+  situacaoHabilitacao String?
+  comprimentoM       Decimal?
+  larguraM           Decimal?
+  tipoPiso           String?
+  orientacao         String?
+  latitude           Decimal?
+  longitude          Decimal?
+  usoNoturno         Boolean   @default(false)
+  hangar             Boolean   @default(false)
+  combustivelDisponivel Boolean   @default(false)
+  documentoHabilitacao Json?
+  fotos              Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("pistasAviacao_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model BenfeitoriaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "benfeitoriaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  quantidade         Int?
+  areaConstruidaM2   Decimal?
+  anoConstrucao      Int?
+  estadoConservacao  String?
+  valorEstimado      Decimal?
+  moeda              String?
+  incluidaVenda      Boolean   @default(false)
+  fotos              Json?
+  documentos         Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("benfeitoriasRurais_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model DivisaoOperacionalRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "divisaoOperacionalRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  areaHa             Decimal?
+  usoAtual           String?
+  capacidadeCabecas  Int?
+  cercaTipo          String?
+  cercaEstado        String?
+  bebedouro          Boolean   @default(false)
+  cocho              Boolean   @default(false)
+  kml                Json?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("divisoesOperacionais_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model ProducaoHistoricaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "producaoHistoricaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  safraAno           String
+  atividade          String?
+  areaHa             Decimal?
+  producaoTotal      Decimal?
+  unidadeProducao    String?
+  produtividadePorHa Decimal?
+  cabecasMediaAno    Int?
+  uaHa               Decimal?
+  observacoes        String?
+  documentos         Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("producoesHistoricas_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model SistemaProdutivoRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "sistemaProdutivoRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  areaHa             Decimal?
+  irrigado           Boolean   @default(false)
+  tipoIrrigacao      String?
+  quantidadePivos    Int?
+  areaIrrigadaHa     Decimal?
+  fonteAgua          String?
+  capacidadeIrrigacaoHa Decimal?
+  certificadoOrganico Boolean   @default(false)
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("sistemasProdutivos_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model AtivoIncluidoVendaRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "ativoIncluidoVendaRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  descricao          String?
+  quantidade         Decimal?
+  valorEstimado      Decimal?
+  moeda              String?
+  incluidoPreco      Boolean   @default(false)
+  documentos         Json?
+  fotos              Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("ativosIncluidosVenda_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model RestricaoTerritorialRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "restricaoTerritorialRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipo               String
+  descricao          String?
+  areaAfetadaHa      Decimal?
+  extensaoKm         Decimal?
+  impacto            String?
+  regularizada       Boolean   @default(false)
+  documentos         Json?
+  kml                Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("restricoesTerritoriais_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model RiscoRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "riscoRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  tipo               String
+  nivel              String?
+  descricao          String?
+  historicoOcorrencia Boolean   @default(false)
+  ultimaOcorrencia   String?
+  areaAfetadaHa      Decimal?
+  mitigacaoExistente Boolean   @default(false)
+  descricaoMitigacao String?
+  documentos         Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("riscosRurais_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model CertificacaoSustentabilidadeRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "certificacaoSustentabilidadeRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  nome               String
+  tipo               String?
+  entidadeCertificadora String?
+  numeroCertificado  String?
+  dataEmissao        String?
+  dataValidade       String?
+  status             String?
+  areaCertificadaHa  Decimal?
+  potencialCreditoCarbono Boolean   @default(false)
+  projetoCarbonoAtivo Boolean   @default(false)
+  estimativaCarbonoTco2e Decimal?
+  documentos         Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("certificacoesSustentabilidade_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model CondicaoComercialRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "condicaoComercialRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  precoPorHa         Decimal
+  moeda              String?
+  valorTotal         Decimal?
+  aceitaParcelamento Boolean   @default(false)
+  percentualEntrada  Decimal?
+  numeroParcelas     Int?
+  aceitaPermuta      Boolean   @default(false)
+  aceitaFinanciamento Boolean   @default(false)
+  comissaoImobiliariaPercentual Decimal?
+  comissaoCorretorPercentual Decimal?
+  exclusividade      Boolean   @default(false)
+  dataInicioExclusividade String?
+  dataFimExclusividade String?
+  motivoVenda        String?
+  observacoes        String?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("condicoesComerciaisRurais_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model DueDiligenceRural {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "dueDiligenceRuralOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  titulo             String
+  dataAnalise        String?
+  status             String?
+  riscoFundiario     String?
+  riscoAmbiental     String?
+  riscoFiscal        String?
+  riscoTrabalhista   String?
+  riscoDocumental    String?
+  notaDocumentacao   Decimal?
+  notaInfraestrutura Decimal?
+  notaLogistica      Decimal?
+  notaRecursosHidricos Decimal?
+  notaClima          Decimal?
+  notaSolo           Decimal?
+  notaAptidaoAgricola Decimal?
+  notaAptidaoPecuaria Decimal?
+  notaAmbiental      Decimal?
+  scoreGeral         Decimal?
+  classificacaoFinal String?
+  pendencias         String?
+  recomendacoes      String?
+  relatorio          Json?
+  imovelId    String @db.Uuid
+  imovel             Imovel @relation("dueDiligences_imovel", fields: [imovelId], references: [id])
+@@unique([id, organizationId])
+}
+model Pais {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "paisOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  estados            Estado[] @relation("estados_pais")
+  imoveisPais        Imovel[] @relation("imoveisPais_pais")
+  nome               String
+  sigla              String
+  codigoTelefone     String
+  nacionalidade      String?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+@@unique([nome, organizationId])
+@@unique([sigla, organizationId])
+@@unique([id, organizationId])
+}
+model Estado {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "estadoOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  cidades            Cidade[] @relation("cidades_estado")
+  imoveisEstado      Imovel[] @relation("imoveisEstado_estado")
+  nome               String
+  sigla              String?
+  codigoOficial      String?
+  tipoDivisao        String?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  paisId    String @db.Uuid
+  pais               Pais @relation("estados_pais", fields: [paisId], references: [id])
+@@unique([id, organizationId])
+}
+model Cidade {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "cidadeOrganization")
+createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+createdByUserId    String?      @db.Uuid
+createdByMemberId  String?      @db.Uuid
+createdByMember    Member?      @relation("createdByMember", fields: [createdByMemberId], references: [id], onDelete: SetNull)
+updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+updatedByUserId    String?      @db.Uuid
+updatedByMemberId  String?      @db.Uuid
+updatedByMember    Member?      @relation("updatedByMember", fields: [updatedByMemberId], references: [id], onDelete: SetNull)
+archivedAt         DateTime?    @db.Timestamptz(3)
+archivedByMemberId String?      @db.Uuid
+archivedByMember   Member?      @relation("archivedByMember", fields: [archivedByMemberId], references: [id], onDelete: SetNull)
+importHash         String?      @unique
+  imoveisCidade      Imovel[] @relation("imoveisCidade_cidadeCadastro")
+  nome               String
+  codigoOficial      String?
+  codigoPostal       String?
+  latitude           Decimal?
+  longitude          Decimal?
+  ativo              Boolean   @default(false)
+  observacoes        String?
+  estadoId    String @db.Uuid
+  estado             Estado @relation("cidades_estado", fields: [estadoId], references: [id])
+@@unique([id, organizationId])
+}
+
+model Invitation {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviterId      String       @db.Uuid
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime     @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+}
+
+model ChatbotUsage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  date           DateTime @db.Date
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  totalTokens    Int      @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, date])
+  @@index([organizationId, date])
+  @@index([date])
+}
+
+// Better Auth tables
+model Session {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expiresAt            DateTime @db.Timestamptz(3)
+  token                String   @unique
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress            String?
+  userAgent            String?
+  userId               String   @db.Uuid
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?  @db.Uuid
+}
+
+model TwoFactor {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  secret      String
+  backupCodes String
+  verified    Boolean  @default(true)
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([secret])
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+}
+
+model Verification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// Better Auth MCP OAuth Models
+model OauthApplication {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String?
+  icon         String?
+  metadata     String?
+  clientId     String?  @unique
+  clientSecret String?
+  redirectUrls String?
+  type         String?
+  disabled     Boolean? @default(false)
+  userId       String?  @db.Uuid
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  oauthaccesstokens OauthAccessToken[]
+  oauthconsents     OauthConsent[]
+}
+
+model OauthAccessToken {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accessToken           String?           @unique
+  refreshToken          String?           @unique
+  accessTokenExpiresAt  DateTime?         @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime?         @db.Timestamptz(3)
+  clientId              String?
+  oauthapplication      OauthApplication? @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId                String?           @db.Uuid
+  user                  User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes                String?
+  createdAt             DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime          @updatedAt @db.Timestamptz(3)
+}
+
+model OauthConsent {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId         String?
+  oauthapplication OauthApplication? @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId           String?           @db.Uuid
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes           String?
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  consentGiven     Boolean?
+}

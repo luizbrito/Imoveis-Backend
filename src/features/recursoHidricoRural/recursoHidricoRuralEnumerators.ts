@@ -1,0 +1,36 @@
+export const recursoHidricoRuralEnumerators = {
+  tipo: {
+    rio: 'rio',
+    arroio: 'arroio',
+    corrego: 'corrego',
+    nascente: 'nascente',
+    acude: 'acude',
+    represa: 'represa',
+    lagoa: 'lagoa',
+    pocoArtesiano: 'pocoArtesiano',
+    pocoComum: 'pocoComum',
+    canal: 'canal',
+    outro: 'outro',
+  },
+  qualidadeAgua: {
+    naoInformado: 'naoInformado',
+    excelente: 'excelente',
+    boa: 'boa',
+    regular: 'regular',
+    ruim: 'ruim',
+  },
+  sazonalidade: {
+    naoInformado: 'naoInformado',
+    permanente: 'permanente',
+    sazonal: 'sazonal',
+    intermitente: 'intermitente',
+  },
+  outorgaSituacao: {
+    naoInformado: 'naoInformado',
+    regular: 'regular',
+    pendente: 'pendente',
+    emAnalise: 'emAnalise',
+    vencido: 'vencido',
+    naoAplicavel: 'naoAplicavel',
+  },
+};
