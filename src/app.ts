@@ -22,6 +22,19 @@ app.use(
 );
 app.use('*', cors(corsConfig));
 
+app.get('/', (c) =>
+  c.json({
+    name: 'Confianza Inmobiliaria API',
+    status: 'ok',
+  }),
+);
+
+app.get('/health', (c) =>
+  c.json({
+    status: 'ok',
+  }),
+);
+
 app.route('/api', apiRoutes);
 
 export default app;
