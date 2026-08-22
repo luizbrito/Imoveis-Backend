@@ -8,7 +8,6 @@
       "default": "./src/*.ts"
     }
   },
-  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "dotenv -e .env -- tsx watch src/server.ts",
     "start": "dotenv -e .env -- node dist/server.js",
@@ -36,11 +35,14 @@
     "@aws-sdk/client-s3": "3.1053.0",
     "@aws-sdk/s3-presigned-post": "3.1053.0",
     "@aws-sdk/s3-request-presigner": "3.1053.0",
+    "@better-auth/api-key": "1.6.11",
+    "@better-upload/server": "3.0.19",
     "@hono/node-server": "2.0.3",
     "@prisma/adapter-pg": "7.8.0",
     "@prisma/client": "7.8.0",
     "@vercel/functions": "3.6.0",
     "bcryptjs": "3.0.3",
+    "better-auth": "1.6.11",
     "dayjs": "1.11.20",
     "file-saver": "2.0.5",
     "filesize": "11.0.17",
