@@ -2,6 +2,7 @@
   "name": "Imoveis-Backend",
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "npm@11.19.0",
   "exports": {
     "./*": {
       "types": "./src/*.ts",
@@ -12,14 +13,14 @@
     "dev": "dotenv -e .env -- tsx watch src/server.ts",
     "start": "node dist/server.js",
     "start:dev": "dotenv -e .env -- node dist/server.js",
-    "start:test": "pnpm build && dotenv -e .env.test -- node dist/server.js",
+    "start:test": "npmbuild && dotenv -e .env.test -- node dist/server.js",
     "build": "tsup",
-    "build:debug": "tsup && node scripts/smoke-start.mjs",
+    "build:debug": "dotenv -e .env -- tsup && node scripts/smoke-start.mjs",
     "typecheck": "tsc --noEmit",
-    "worker": "node dist/workers.js",    
+    "worker": "node dist/workers.js",
     "worker:dev": "dotenv -e .env -- tsx watch src/workers.ts",
     "db:migrate:create": "dotenv -e .env -- prisma generate && dotenv -e .env -c -- prisma migrate dev && dotenv -e .env -c -- tsx src/prisma/setupRowLevelSecurityCli.ts",
-    "db:migrate": "prisma migrate deploy && tsx src/prisma/setupRowLevelSecurityCli.ts",    
+    "db:migrate": "prisma migrate deploy && tsx src/prisma/setupRowLevelSecurityCli.ts",
     "vercel-build": "prisma generate && prisma migrate deploy && tsx src/prisma/setupRowLevelSecurityCli.ts && tsup",
     "prisma:generate": "prisma generate",
     "prisma:generate:dev": "dotenv -e .env -- prisma generate",
@@ -45,8 +46,10 @@
     "@prisma/adapter-pg": "7.8.0",
     "@prisma/client": "7.8.0",
     "@vercel/functions": "3.6.0",
-    "bcryptjs": "3.0.3",
+    "@better-auth/core": "1.6.11",
+    "@better-auth/utils": "0.4.0",
     "better-auth": "1.6.11",
+    "bcryptjs": "3.0.3",
     "dayjs": "1.11.20",
     "file-saver": "2.0.5",
     "filesize": "11.0.17",
@@ -95,5 +98,11 @@
     "typescript": "6.0.3",
     "vite": "8.0.14",
     "vitest": "4.1.7"
+  },
+  "allowScripts": {
+    "prisma@7.8.0": true,
+    "@prisma/engines@7.8.0": true,
+    "esbuild@0.27.7": true,
+    "esbuild@0.28.2": true
   }
 }
