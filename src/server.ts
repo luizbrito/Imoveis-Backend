@@ -3,7 +3,7 @@ import app from './app';
 import { env } from './env';
 import { dictionaryIntegrityCheck } from './translation/dictionaryIntegrityCheck';
 
-const port = env.PORT || '3011';
+const port = env.PORT || '3000';
 
 // Check dictionary integrity on startup
 dictionaryIntegrityCheck();
