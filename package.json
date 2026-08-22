@@ -1,5 +1,5 @@
 {
-  "name": "@project/backend",
+  "name": "Imoveis-Backend",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -8,6 +8,7 @@
       "default": "./src/*.ts"
     }
   },
+  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "dotenv -e .env -- tsx watch src/server.ts",
     "start": "dotenv -e .env -- node dist/server.js",
