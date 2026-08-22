@@ -30,7 +30,8 @@
     "test:coverage": "dotenv -e .env.test -- vitest run --coverage",
     "test:e2e": "playwright install --with-deps && playwright test",
     "test:e2e:ui": "playwright install --with-deps && playwright test --ui",
-    "test:e2e:headed": "playwright install --with-deps && playwright test --headed"
+    "test:e2e:headed": "playwright install --with-deps && playwright test --headed",
+    "runtime:test": "node dist/server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.98.0",
