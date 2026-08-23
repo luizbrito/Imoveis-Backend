@@ -1,4 +1,4 @@
-process.env.PORT = '3999';
+process.env.PORT = '3000';
 
 try {
   console.log('=== STARTING BACKEND SMOKE TEST ===');
@@ -9,7 +9,7 @@ try {
 
   await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  const response = await fetch('http://127.0.0.1:3999/api/health');
+  const response = await fetch('http://127.0.0.1:3000/api/health');
   const body = await response.text();
 
   console.log('Health status:', response.status);
